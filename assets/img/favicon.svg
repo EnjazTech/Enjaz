@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ENJAZ">
+  <rect width="64" height="64" rx="14" fill="#07080c" />
+  <g fill="none" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 18 L26 32 L14 46" stroke="#5dffde" opacity=".35" />
+    <path d="M26 18 L38 32 L26 46" stroke="#5dffde" opacity=".7" />
+    <path d="M38 18 L50 32 L38 46" stroke="#a48bff" />
+  </g>
+</svg>

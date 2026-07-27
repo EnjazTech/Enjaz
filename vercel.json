@@ -1,0 +1,112 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "cleanUrls": true,
+  "trailingSlash": true,
+  "redirects": [
+    {
+      "source": "/ar/:path*",
+      "destination": "/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "header",
+          "key": "accept-language",
+          "value": "^\\s*(?!ar\\b)[a-z]{2}(-[A-Za-z0-9]+)?\\s*(;q=(1(\\.0+)?|0\\.[5-9]\\d*))?\\s*(,.*)?$"
+        }
+      ],
+      "missing": [
+        {
+          "type": "cookie",
+          "key": "enjaz_lang"
+        }
+      ],
+      "destination": "/en/",
+      "permanent": false
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "cookie",
+          "key": "enjaz_lang",
+          "value": "en"
+        }
+      ],
+      "destination": "/en/",
+      "permanent": false
+    },
+    {
+      "source": "/en/",
+      "has": [
+        {
+          "type": "cookie",
+          "key": "enjaz_lang",
+          "value": "ar"
+        }
+      ],
+      "destination": "/",
+      "permanent": false
+    }
+  ],
+  "headers": [
+    {
+      "source": "/assets/fonts/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/assets/img/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=2592000"
+        }
+      ]
+    },
+    {
+      "source": "/assets/(css|js)/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "geolocation=(), microphone=(), camera=(), payment=()"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'none'; frame-ancestors 'self'; base-uri 'self'; object-src 'none'"
+        }
+      ]
+    }
+  ]
+}
