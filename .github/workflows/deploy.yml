@@ -1,0 +1,69 @@
+name: Deploy to enjaz-tech.net
+
+# Pushes the site to /var/www/enjaz on the production box.
+#
+# The SSH key used here is confined server-side: its authorized_keys entry is
+#   command="/usr/bin/rrsync -wo /var/www/enjaz",restrict
+# so it can ONLY rsync into the webroot — it cannot open a shell, forward
+# ports, or read anything back. That is why the rsync target below is ":/"
+# rather than ":/var/www/enjaz": rrsync makes the webroot the root of the
+# key's whole world.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never let two deploys race; rrsync also takes a per-user lock and the
+# second one would simply fail.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: rsync to production
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out the site
+        uses: actions/checkout@v4
+
+      - name: Load the deploy key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          install -m 600 /dev/null ~/.ssh/id_ed25519
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          # Pinned host key — no StrictHostKeyChecking=no, so a MITM or a
+          # rebuilt server fails the deploy loudly instead of silently
+          # trusting whatever answers on port 22.
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Publish
+        run: |
+          rsync -az --delete --itemize-changes \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='.gitignore' \
+            --exclude='README.md' \
+            --exclude='vercel.json' \
+            -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" \
+            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/"
+
+      - name: Verify the live site
+        run: |
+          set -e
+          for url in https://enjaz-tech.net/ https://enjaz-tech.net/en/; do
+            code=$(curl -sS -o /tmp/body -w '%{http_code}' --retry 3 --retry-delay 3 "$url")
+            echo "$url -> $code"
+            [ "$code" = "200" ] || { echo "::error::$url returned $code"; exit 1; }
+          done
+          # The canonical tag is the thing most likely to regress silently if
+          # someone re-deploys an older build, so assert on it directly.
+          grep -q 'rel="canonical" href="https://enjaz-tech.net/"' /tmp/body \
+            || curl -sS https://enjaz-tech.net/ | grep -q 'canonical" href="https://enjaz-tech.net/"' \
+            || { echo "::error::canonical URL is not enjaz-tech.net"; exit 1; }
+          echo "Live site verified."
