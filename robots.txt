@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://enjaz-tech.vercel.app/sitemap.xml
+Sitemap: https://enjaz-tech.net/sitemap.xml
