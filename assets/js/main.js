@@ -2,14 +2,16 @@
  * ENJAZ — interface behaviour.
  *
  * Loaded as a deferred module. Everything here is progressive enhancement:
- * the page is complete and readable with scripting disabled.
+ * the page is complete and readable with scripting disabled. The 3D film is
+ * loaded from here, and if it cannot run the page falls back without ever
+ * hiding the copy (see src/experience/SPEC.md, section 8).
  */
 
 "use strict";
 
 const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)");
-const COARSE_POINTER = window.matchMedia("(pointer: coarse), (max-width: 48rem)");
 const MOBILE_NAV = window.matchMedia("(max-width: 56.25rem)");
+const ROOT = document.documentElement;
 
 /* --------------------------------------------------------------------------
    Mobile navigation
@@ -104,7 +106,12 @@ function initReveal() {
     return;
   }
 
-  if (REDUCED_MOTION.matches || !("IntersectionObserver" in window)) {
+  /* The tall layout never hides copy: the film does the arriving. */
+  if (
+    ROOT.classList.contains("w3d") ||
+    REDUCED_MOTION.matches ||
+    !("IntersectionObserver" in window)
+  ) {
     targets.forEach((element) => element.classList.add("is-visible"));
     return;
   }
@@ -158,8 +165,9 @@ function initTypewriter() {
   let charCount = 0;
   let deleting = false;
   let hold = 0;
+  let timer = 0;
 
-  window.setInterval(() => {
+  const tick = () => {
     const phrase = phrases[phraseIndex];
 
     if (!deleting) {
@@ -179,158 +187,204 @@ function initTypewriter() {
     }
 
     output.textContent = phrase.slice(0, charCount);
-  }, TICK_MS);
-}
+  };
 
-/* --------------------------------------------------------------------------
-   Pointer glow
-   -------------------------------------------------------------------------- */
+  /* Only runs while on screen, so the film's frame budget never pays for it. */
+  const start = () => {
+    if (!timer) {
+      timer = window.setInterval(tick, TICK_MS);
+    }
+  };
+  const stop = () => {
+    window.clearInterval(timer);
+    timer = 0;
+  };
 
-function initCursorGlow() {
-  const glow = document.querySelector("[data-cursor-glow]");
-
-  if (!glow || COARSE_POINTER.matches || REDUCED_MOTION.matches) {
+  if (!("IntersectionObserver" in window)) {
+    start();
     return;
   }
 
-  let x = 0;
-  let y = 0;
-  let queued = false;
+  new IntersectionObserver((entries) => {
+    entries.forEach((entry) => (entry.isIntersecting ? start() : stop()));
+  }).observe(output.closest(".hero__terminal") || output);
+}
 
-  const paint = () => {
-    glow.style.transform = `translate(${x}px, ${y}px)`;
-    glow.style.opacity = "1";
-    queued = false;
-  };
+/* --------------------------------------------------------------------------
+   WhatsApp dock: hidden only while a real WhatsApp button is on screen
+   -------------------------------------------------------------------------- */
 
-  window.addEventListener(
-    "pointermove",
-    (event) => {
-      x = event.clientX;
-      y = event.clientY;
-      if (!queued) {
-        queued = true;
-        window.requestAnimationFrame(paint);
+function initDock() {
+  const dock = document.querySelector(".wa-dock");
+  if (!dock || !("IntersectionObserver" in window)) {
+    return;
+  }
+
+  const onScreen = new Set();
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        onScreen.add(entry.target);
+      } else {
+        onScreen.delete(entry.target);
       }
+    });
+    dock.classList.toggle("is-hidden", onScreen.size > 0);
+  });
+
+  document
+    .querySelectorAll(".hero__actions, .cta__action")
+    .forEach((element) => observer.observe(element));
+}
+
+/* --------------------------------------------------------------------------
+   Stills
+   -------------------------------------------------------------------------- */
+
+const STILL_ZONES = [
+  [".hero", "desk"],
+  [".ticker", "desk"],
+  ["#services", "archive"],
+  ["#process", "shaft"],
+  [".fall", "aerial"],
+  ["#why", "aerial"],
+  [".cta", "dawn"],
+  ["footer", "dawn"],
+];
+
+/* Tall layout: track which still sits behind the viewport's centre line. */
+function initStillZones() {
+  if (!ROOT.classList.contains("w3d") || !("IntersectionObserver" in window)) {
+    return;
+  }
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          ROOT.setAttribute("data-still", entry.target.dataset.stillZone);
+        }
+      });
     },
-    { passive: true }
+    { rootMargin: "-50% 0px -50% 0px" }
   );
 
-  document.addEventListener("pointerleave", () => {
-    glow.style.opacity = "0";
+  STILL_ZONES.forEach(([selector, still]) => {
+    const element = document.querySelector(selector);
+    if (element) {
+      element.dataset.stillZone = still;
+      observer.observe(element);
+    }
   });
 }
 
+/* Compact layout: load each zone's still as it comes near. */
+function initStills() {
+  const zones = document.querySelectorAll(".hero, #services, #process, #why, .cta");
+
+  if (!("IntersectionObserver" in window)) {
+    zones.forEach((zone) => zone.classList.add("still-in"));
+    return;
+  }
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("still-in");
+          observer.unobserve(entry.target);
+        }
+      });
+    },
+    { rootMargin: ROOT.classList.contains("save") ? "0px" : "100% 0px" }
+  );
+
+  zones.forEach((zone) => observer.observe(zone));
+}
+
 /* --------------------------------------------------------------------------
-   Particle constellation
+   The film, and how it steps aside
    -------------------------------------------------------------------------- */
 
-function initParticles() {
-  const canvas = document.querySelector("[data-particles]");
-
-  if (!canvas || COARSE_POINTER.matches || REDUCED_MOTION.matches) {
+/* Before lamp-on: tall tracks with no film are a slog, so go compact. The
+ * visitor stays at the same caption, however far the layout moved under them. */
+function collapseToStills() {
+  if (!ROOT.classList.contains("w3d")) {
     return;
   }
 
-  const context = canvas.getContext("2d");
-  if (!context) {
-    return;
-  }
+  const middle = window.innerHeight / 2;
+  let nearest = null;
+  let nearestDistance = Infinity;
 
-  const MAX_POINTS = 90;
-  const LINK_DISTANCE_SQ = 16000;
-  const DENSITY_DIVISOR = 18000;
-
-  let width = 0;
-  let height = 0;
-  let ratio = 1;
-  let points = [];
-  let frame = 0;
-
-  const resize = () => {
-    width = window.innerWidth;
-    height = window.innerHeight;
-    ratio = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.floor(width * ratio);
-    canvas.height = Math.floor(height * ratio);
-    context.setTransform(ratio, 0, 0, ratio, 0, 0);
-
-    const count = Math.min(MAX_POINTS, Math.floor((width * height) / DENSITY_DIVISOR));
-    points = Array.from({ length: count }, () => ({
-      x: Math.random() * width,
-      y: Math.random() * height,
-      vx: (Math.random() - 0.5) * 0.35,
-      vy: (Math.random() - 0.5) * 0.35,
-    }));
-  };
-
-  const draw = () => {
-    context.clearRect(0, 0, width, height);
-    context.fillStyle = "rgba(93, 255, 222, 0.5)";
-
-    for (const point of points) {
-      point.x += point.vx;
-      point.y += point.vy;
-      if (point.x < 0 || point.x > width) {
-        point.vx *= -1;
-      }
-      if (point.y < 0 || point.y > height) {
-        point.vy *= -1;
-      }
-
-      context.beginPath();
-      context.arc(point.x, point.y, 1.2, 0, Math.PI * 2);
-      context.fill();
+  document.querySelectorAll(".shot").forEach((shot) => {
+    const box = shot.getBoundingClientRect();
+    const distance = Math.abs((box.top + box.bottom) / 2 - middle);
+    if (box.height > 0 && distance < nearestDistance) {
+      nearest = shot;
+      nearestDistance = distance;
     }
-
-    for (let i = 0; i < points.length; i += 1) {
-      for (let j = i + 1; j < points.length; j += 1) {
-        const dx = points[i].x - points[j].x;
-        const dy = points[i].y - points[j].y;
-        const distanceSq = dx * dx + dy * dy;
-
-        if (distanceSq < LINK_DISTANCE_SQ) {
-          const alpha = 0.14 * (1 - distanceSq / LINK_DISTANCE_SQ);
-          context.strokeStyle = `rgba(164, 139, 255, ${alpha.toFixed(3)})`;
-          context.beginPath();
-          context.moveTo(points[i].x, points[i].y);
-          context.lineTo(points[j].x, points[j].y);
-          context.stroke();
-        }
-      }
-    }
-
-    frame = window.requestAnimationFrame(draw);
-  };
-
-  const start = () => {
-    if (!frame) {
-      frame = window.requestAnimationFrame(draw);
-    }
-  };
-
-  const stop = () => {
-    window.cancelAnimationFrame(frame);
-    frame = 0;
-  };
-
-  let resizeTimer = 0;
-  window.addEventListener("resize", () => {
-    window.clearTimeout(resizeTimer);
-    resizeTimer = window.setTimeout(resize, 150);
   });
 
-  /* Don't burn cycles on a backgrounded tab. */
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) {
-      stop();
+  const before = nearest ? nearest.getBoundingClientRect().top : 0;
+  ROOT.classList.remove("w3d", "world-on", "world-off");
+  ROOT.removeAttribute("data-still");
+  ROOT.classList.add("stills");
+
+  if (nearest && window.scrollY >= 4) {
+    window.scrollBy({
+      top: nearest.getBoundingClientRect().top - before,
+      behavior: "instant",
+    });
+  }
+
+  initStills();
+  initReveal();
+}
+
+/* After lamp-on the visitor is mid-read: keep the layout, swap in a still. */
+function worldOff() {
+  ROOT.classList.add("world-off");
+}
+
+function initExperience() {
+  if (!ROOT.classList.contains("w3d")) {
+    return;
+  }
+
+  let world = null;
+
+  const load = async () => {
+    try {
+      const { boot } = await import("/assets/js/experience/boot.js");
+      world = await boot({ onFail: collapseToStills, onOff: worldOff });
+    } catch (error) {
+      collapseToStills();
+    }
+  };
+
+  const whenIdle = () => {
+    if ("requestIdleCallback" in window) {
+      window.requestIdleCallback(load, { timeout: 1500 });
     } else {
-      start();
+      window.setTimeout(load, 400);
+    }
+  };
+
+  if (document.readyState === "complete") {
+    whenIdle();
+  } else {
+    window.addEventListener("load", whenIdle, { once: true });
+  }
+
+  REDUCED_MOTION.addEventListener("change", (event) => {
+    if (event.matches) {
+      if (world && world.stop) {
+        world.stop();
+      }
+      worldOff();
     }
   });
-
-  resize();
-  start();
 }
 
 /* --------------------------------------------------------------------------
@@ -354,6 +408,10 @@ initNav();
 initHeaderScrollState();
 initReveal();
 initTypewriter();
-initCursorGlow();
-initParticles();
+initDock();
+initStillZones();
+if (ROOT.classList.contains("stills")) {
+  initStills();
+}
+initExperience();
 initCurrentYear();

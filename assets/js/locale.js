@@ -160,6 +160,62 @@
     return;
   }
 
+  /*
+   * Decide the layout before first paint. Only a document that stays gets here,
+   * so a redirecting one never sets it. No class means the plain page.
+   */
+  function pickMode() {
+    var forced = /[?&]tier=(L|M|H|stills)\b/.exec(window.location.search);
+    if (forced) {
+      return forced[1] === "stills" ? "stills" : "w3d";
+    }
+    try {
+      var tier = (window.localStorage.getItem("enjaz:tier") || "").split(":");
+      /* A stored failure lasts 14 days, so one bad session is not forever. */
+      if (tier[0] === "S" && Date.now() - Number(tier[1]) < 1209600000) {
+        return "stills";
+      }
+    } catch (error) {
+      /* Private mode / storage disabled. */
+    }
+    var matches = function (query) {
+      return window.matchMedia && window.matchMedia(query).matches;
+    };
+    if (
+      matches("(prefers-reduced-motion: reduce)") ||
+      matches("(prefers-reduced-data: reduce)") ||
+      matches("(forced-colors: active)")
+    ) {
+      return "stills";
+    }
+    var connection = navigator.connection || {};
+    if (
+      connection.saveData ||
+      /2g/.test(connection.effectiveType || "") ||
+      connection.rtt > 900
+    ) {
+      root.classList.add("save");
+      return "stills";
+    }
+    if (navigator.deviceMemory && navigator.deviceMemory < 3) {
+      return "stills";
+    }
+    if (!window.WebGL2RenderingContext || !window.IntersectionObserver) {
+      return "stills";
+    }
+    if (
+      !window.CSS ||
+      !CSS.supports ||
+      !CSS.supports("height", "1svh") ||
+      !CSS.supports("overflow", "clip")
+    ) {
+      return "stills";
+    }
+    return "w3d";
+  }
+
+  root.classList.add(pickMode());
+
   /* Same document, but strip the now-redundant query string. */
   if (explicit && window.history.replaceState) {
     window.history.replaceState(

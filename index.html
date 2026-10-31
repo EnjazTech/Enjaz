@@ -162,8 +162,6 @@
     <a class="skip-link" href="#main">تجاوز إلى المحتوى</a>
 
     <!-- عناصر الخلفية الزخرفية -->
-    <canvas class="fx fx-canvas" data-particles aria-hidden="true"></canvas>
-    <div class="fx fx-cursor" data-cursor-glow aria-hidden="true"></div>
     <div class="fx fx-orb fx-orb--violet" aria-hidden="true"></div>
     <div class="fx fx-orb fx-orb--mint" aria-hidden="true"></div>
 
@@ -267,38 +265,48 @@
       </div>
     </header>
 
-    <main class="shell" id="main">
-      <section class="container hero" aria-labelledby="hero-title">
-        <p class="eyebrow eyebrow--mint hero__eyebrow">
-          // إنجاز تسلَّيم في الموعد
-        </p>
-        <h1 class="hero__title" id="hero-title">
-          من الأعمال التقليدية
-          <span class="hero__title-accent">إلى المستقبل.</span>
-        </h1>
-        <p class="lead hero__lead">
-          مواقع، تطبيقات، تكاملات API، إنقاذ وإصلاح، وتحسين تجربة المستخدم —
-          نبنيها بسرعة للشركات الصغيرة والناشئة التي ما زالت تُدار يدويًا.
-        </p>
-        <div class="hero__actions">
-          <a
-            class="btn btn--primary"
-            href="https://wa.me/249112066117"
-            rel="noopener"
-            target="_blank"
-            >ابدأ محادثة ←</a
-          >
-          <a class="btn btn--ghost" href="#services">تعرّف على الخدمات</a>
+    <main
+      class="shell"
+      id="main"
+      data-atlas='{"invoice":"فاتورة","receipt":"إيصال","quote":"عرض سعر","ledger":"دفتر","paid":"تم"}'
+    >
+      <section
+        class="container hero track"
+        data-shot="hero"
+        aria-labelledby="hero-title"
+      >
+        <div class="shot">
+          <p class="eyebrow eyebrow--mint hero__eyebrow">
+            // إنجاز تسلَّيم في الموعد
+          </p>
+          <h1 class="hero__title" id="hero-title">
+            من الأعمال التقليدية
+            <span class="hero__title-accent">إلى المستقبل.</span>
+          </h1>
+          <p class="lead hero__lead">
+            مواقع، تطبيقات، تكاملات API، إنقاذ وإصلاح، وتحسين تجربة المستخدم —
+            نبنيها بسرعة للشركات الصغيرة والناشئة التي ما زالت تُدار يدويًا.
+          </p>
+          <div class="hero__actions">
+            <a
+              class="btn btn--primary"
+              href="https://wa.me/249112066117"
+              rel="noopener"
+              target="_blank"
+              >ابدأ محادثة ←</a
+            >
+            <a class="btn btn--ghost" href="#services">تعرّف على الخدمات</a>
+          </div>
+          <p class="hero__terminal" aria-hidden="true">
+            <span
+              data-typewriter='["نبني مواقع تبيع فعلًا_","نُطلق تطبيقات تعمل بسلاسة_","ننقذ مشاريع تخلّى عنها غيرنا_","نربط الأنظمة من أول خطوة لآخرها_"]'
+            ></span
+            ><span class="hero__caret">▊</span>
+          </p>
         </div>
-        <p class="hero__terminal" aria-hidden="true">
-          <span
-            data-typewriter='["نبني مواقع تبيع فعلًا_","نُطلق تطبيقات تعمل بسلاسة_","ننقذ مشاريع تخلّى عنها غيرنا_","نربط الأنظمة من أول خطوة لآخرها_"]'
-          ></span
-          ><span class="hero__caret">▊</span>
-        </p>
       </section>
 
-      <div class="ticker" aria-hidden="true">
+      <div class="ticker track" data-shot="drop" aria-hidden="true">
         <div class="ticker__track">
           <span>مواقع الويب</span><span>✦</span> <span>تطبيقات الموبايل</span
           ><span>✦</span> <span>تكاملات API</span><span>✦</span>
@@ -316,59 +324,73 @@
         id="services"
         aria-labelledby="services-title"
       >
-        <div class="section__head reveal">
-          <p class="eyebrow">01 — الخدمات</p>
-          <h2 id="services-title">كل ما يحتاجه عملك للتحوّل الرقمي.</h2>
+        <div class="section__head reveal track" data-shot="svc.head">
+          <div class="shot">
+            <p class="eyebrow">01 — الخدمات</p>
+            <h2 id="services-title">كل ما يحتاجه عملك للتحوّل الرقمي.</h2>
+          </div>
         </div>
 
-        <ul class="card-grid">
-          <li class="card reveal">
-            <p class="card__tag">⟨ / ⟩ web</p>
-            <h3 class="card__title">تطوير المواقع</h3>
-            <p class="card__text">
-              مواقع سريعة وحديثة تحوّل الزائر إلى عميل — من صفحة واحدة إلى منصة
-              كاملة.
-            </p>
+        <ul class="card-grid" role="list">
+          <li class="card reveal track" data-shot="svc.web">
+            <div class="shot">
+              <p class="card__tag">⟨ / ⟩ web</p>
+              <h3 class="card__title">تطوير المواقع</h3>
+              <p class="card__text">
+                مواقع سريعة وحديثة تحوّل الزائر إلى عميل — من صفحة واحدة إلى منصة
+                كاملة.
+              </p>
+            </div>
           </li>
-          <li class="card reveal">
-            <p class="card__tag">▣ apps</p>
-            <h3 class="card__title">تطوير التطبيقات</h3>
-            <p class="card__text">
-              تطبيقات موبايل وويب تستبدل الورق والمكالمات والفوضى اليدوية بأداة
-              واحدة منظّمة.
-            </p>
+          <li class="card reveal track" data-shot="svc.apps">
+            <div class="shot">
+              <p class="card__tag">▣ apps</p>
+              <h3 class="card__title">تطوير التطبيقات</h3>
+              <p class="card__text">
+                تطبيقات موبايل وويب تستبدل الورق والمكالمات والفوضى اليدوية بأداة
+                واحدة منظّمة.
+              </p>
+            </div>
           </li>
-          <li class="card reveal">
-            <p class="card__tag">⇄ api</p>
-            <h3 class="card__title">تكاملات API</h3>
-            <p class="card__text">
-              نربط أنظمة الدفع والشحن وإدارة العملاء والحسابات لتتنقل البيانات
-              دون نسخ ولصق.
-            </p>
+          <li class="card reveal track" data-shot="svc.api">
+            <div class="shot">
+              <p class="card__tag">⇄ api</p>
+              <h3 class="card__title">تكاملات API</h3>
+              <p class="card__text">
+                نربط أنظمة الدفع والشحن وإدارة العملاء والحسابات لتتنقل البيانات
+                دون نسخ ولصق.
+              </p>
+            </div>
           </li>
-          <li class="card reveal">
-            <p class="card__tag">⚒ rescue</p>
-            <h3 class="card__title">إنقاذ وإصلاح</h3>
-            <p class="card__text">
-              الموقع متوقف؟ التطبيق لايعمل؟ شيء يتصرّف بغرابة؟ نجد المشكلة،
-              ونصلحها سريعًا، ونضمن ألّا تتكرر.
-            </p>
+          <li class="card reveal track" data-shot="svc.rescue">
+            <div class="shot">
+              <p class="card__tag">⚒ rescue</p>
+              <h3 class="card__title">إنقاذ وإصلاح</h3>
+              <p class="card__text">
+                الموقع متوقف؟ التطبيق لايعمل؟ شيء يتصرّف بغرابة؟ نجد المشكلة،
+                ونصلحها سريعًا، ونضمن ألّا تتكرر.
+              </p>
+            </div>
           </li>
-          <li class="card reveal">
-            <p class="card__tag">✧ ui/ux</p>
-            <h3 class="card__title">تحسين تجربة المستخدم</h3>
-            <p class="card__text">
-              نعيد تصميم الواجهات المربكة إلى تجربة يستمتع عملاؤك باستخدامها
-              فعلًا.
-            </p>
+          <li class="card reveal track" data-shot="svc.ux">
+            <div class="shot">
+              <p class="card__tag">✧ ui/ux</p>
+              <h3 class="card__title">تحسين تجربة المستخدم</h3>
+              <p class="card__text">
+                نعيد تصميم الواجهات المربكة إلى تجربة يستمتع عملاؤك باستخدامها
+                فعلًا.
+              </p>
+            </div>
           </li>
-          <li class="card reveal">
-            <p class="card__tag">⚙ auto</p>
-            <h3 class="card__title">الأتمتة</h3>
-            <p class="card__text">
-              نحوّل العمل اليدوي المتكرر — الفواتير والتقارير والمتابعات — إلى
-              سكربتات تعمل وحدها.
-            </p>
+          <li class="card reveal track" data-shot="svc.auto">
+            <div class="shot">
+              <p class="card__tag">⚙ auto</p>
+              <h3 class="card__title">الأتمتة</h3>
+              <p class="card__text">
+                نحوّل العمل اليدوي المتكرر — الفواتير والتقارير والمتابعات — إلى
+                سكربتات تعمل وحدها.
+              </p>
+            </div>
           </li>
         </ul>
       </section>
@@ -378,42 +400,54 @@
         id="process"
         aria-labelledby="process-title"
       >
-        <div class="section__head reveal">
-          <p class="eyebrow">02 — طريقة العمل</p>
-          <h2 id="process-title">من «المشكلة» إلى «الحل».</h2>
+        <div class="section__head reveal track" data-shot="process.head">
+          <div class="shot">
+            <p class="eyebrow">02 — طريقة العمل</p>
+            <h2 id="process-title">من «المشكلة» إلى «الحل».</h2>
+          </div>
         </div>
 
-        <ol class="steps">
-          <li class="step reveal">
-            <p class="step__number">01</p>
-            <h3 class="step__title">نتحدّث</h3>
-            <p class="step__text">
-              محادثة سريعة عن أهدافك وتحدياتك. مجانية وبلا أي التزام.
-            </p>
+        <ol class="steps" role="list">
+          <li class="step reveal track" data-shot="step.talk">
+            <div class="shot">
+              <p class="step__number">01</p>
+              <h3 class="step__title">نتحدّث</h3>
+              <p class="step__text">
+                محادثة سريعة عن أهدافك وتحدياتك. مجانية وبلا أي التزام.
+              </p>
+            </div>
           </li>
-          <li class="step reveal">
-            <p class="step__number">02</p>
-            <h3 class="step__title">نحدّد النطاق</h3>
-            <p class="step__text">
-              خطة واضحة بسعر ثابت وجدول زمني محدّد خلال 48 ساعة.
-            </p>
+          <li class="step reveal track" data-shot="step.scope">
+            <div class="shot">
+              <p class="step__number">02</p>
+              <h3 class="step__title">نحدّد النطاق</h3>
+              <p class="step__text">
+                خطة واضحة بسعر ثابت وجدول زمني محدّد خلال 48 ساعة.
+              </p>
+            </div>
           </li>
-          <li class="step reveal">
-            <p class="step__number">03</p>
-            <h3 class="step__title">نبني</h3>
-            <p class="step__text">
-              عروض دورية ترى فيها التقدّم — لا وعودًا فقط.
-            </p>
+          <li class="step reveal track" data-shot="step.build">
+            <div class="shot">
+              <p class="step__number">03</p>
+              <h3 class="step__title">نبني</h3>
+              <p class="step__text">
+                عروض دورية ترى فيها التقدّم — لا وعودًا فقط.
+              </p>
+            </div>
           </li>
-          <li class="step reveal">
-            <p class="step__number">04</p>
-            <h3 class="step__title">نُطلق وندعم</h3>
-            <p class="step__text">
-              نُطلق المشروع، ندرّب فريقك، ونبقى متاحين للإصلاحات.
-            </p>
+          <li class="step reveal track" data-shot="step.ship">
+            <div class="shot">
+              <p class="step__number">04</p>
+              <h3 class="step__title">نُطلق وندعم</h3>
+              <p class="step__text">
+                نُطلق المشروع، ندرّب فريقك، ونبقى متاحين للإصلاحات.
+              </p>
+            </div>
           </li>
         </ol>
       </section>
+
+      <div class="fall track" data-shot="fall" aria-hidden="true"></div>
 
       <section
         class="container section section--tight"
@@ -421,62 +455,77 @@
         aria-labelledby="why-title"
       >
         <div class="split">
-          <div class="reveal">
-            <p class="eyebrow">03 — لماذا إنجاز</p>
-            <h2 id="why-title">هل ما زلت تعمل بجداول البيانات والمكالمات؟</h2>
-            <p class="lead why__lead">
-              نتخصص في الأعمال التي لم تتحوّل رقميًا بعد — أو تحوّلت في منتصف
-              الطريق وتوقفت. بلا مصطلحات معقّدة ولا عقود متضخمة. نُسلّم برمجيات
-              تعمل، ونصلح ما تركه غيرنا معطّلًا.
-            </p>
-            <ul class="checklist">
-              <li>عرض سعر بنطاق ثابت — تعرف التكلفة قبل أن نبدأ</li>
-              <li>تواصل مباشر مع من يبني فعلًا — بلا وسطاء</li>
-              <li>نصون ما نبنيه — نحلّ المشكلات ولا نحاسبك عليها مرتين</li>
-            </ul>
+          <div class="reveal why__copy">
+            <div class="track" data-shot="why.q">
+              <div class="shot">
+                <p class="eyebrow">03 — لماذا إنجاز</p>
+                <h2 id="why-title">هل ما زلت تعمل بجداول البيانات والمكالمات؟</h2>
+                <p class="lead why__lead">
+                  نتخصص في الأعمال التي لم تتحوّل رقميًا بعد — أو تحوّلت في منتصف
+                  الطريق وتوقفت. بلا مصطلحات معقّدة ولا عقود متضخمة. نُسلّم برمجيات
+                  تعمل، ونصلح ما تركه غيرنا معطّلًا.
+                </p>
+              </div>
+            </div>
+            <div class="track" data-shot="why.list">
+              <div class="shot">
+                <ul class="checklist" role="list">
+                  <li>عرض سعر بنطاق ثابت — تعرف التكلفة قبل أن نبدأ</li>
+                  <li>تواصل مباشر مع من يبني فعلًا — بلا وسطاء</li>
+                  <li>نصون ما نبنيه — نحلّ المشكلات ولا نحاسبك عليها مرتين</li>
+                </ul>
+              </div>
+            </div>
           </div>
 
-          <ul class="stats reveal">
-            <li class="stat">
-              <p class="stat__value">48h</p>
-              <p class="stat__label">حتى عرض سعر ثابت</p>
-            </li>
-            <li class="stat">
-              <p class="stat__value">100%</p>
-              <p class="stat__label">تواصل مباشر</p>
-            </li>
-            <li class="stat">
-              <p class="stat__value">24h</p>
-              <p class="stat__label">زمن الاستجابة</p>
-            </li>
-            <li class="stat">
-              <p class="stat__value">∞</p>
-              <p class="stat__label">أكواب القهوة</p>
-            </li>
-          </ul>
+          <div class="track" data-shot="why.stats">
+            <div class="shot">
+              <ul class="stats reveal" role="list">
+                <li class="stat">
+                  <p class="stat__value">48h</p>
+                  <p class="stat__label">حتى عرض سعر ثابت</p>
+                </li>
+                <li class="stat">
+                  <p class="stat__value">100%</p>
+                  <p class="stat__label">تواصل مباشر</p>
+                </li>
+                <li class="stat">
+                  <p class="stat__value">24h</p>
+                  <p class="stat__label">زمن الاستجابة</p>
+                </li>
+                <li class="stat">
+                  <p class="stat__value">∞</p>
+                  <p class="stat__label">أكواب القهوة</p>
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
       </section>
 
       <section
-        class="container cta section section--tight"
+        class="container cta section section--tight track"
+        data-shot="cta"
         aria-labelledby="cta-title"
       >
-        <div class="cta__panel reveal">
-          <p class="cta__wordmark">إنجاز</p>
-          <h2 class="cta__title" id="cta-title">جاهز للتنفيذ؟</h2>
-          <p class="cta__text">تواصل معنا — نردّ في نفس اليوم.</p>
-          <a
-            class="btn btn--primary btn--large cta__action"
-            href="https://wa.me/249112066117"
-            rel="noopener"
-            target="_blank"
-            >+249 112 066 117</a
-          >
+        <div class="shot">
+          <div class="cta__panel reveal">
+            <p class="cta__wordmark">إنجاز</p>
+            <h2 class="cta__title" id="cta-title">جاهز للتنفيذ؟</h2>
+            <p class="cta__text">تواصل معنا — نردّ في نفس اليوم.</p>
+            <a
+              class="btn btn--primary btn--large cta__action"
+              href="https://wa.me/249112066117"
+              rel="noopener"
+              target="_blank"
+              >+249 112 066 117</a
+            >
+          </div>
         </div>
       </section>
     </main>
 
-    <footer class="footer shell">
+    <footer class="footer shell" data-shot="coda">
       <div class="container footer__inner">
         <p>
           © <span data-current-year>2026</span>
@@ -494,5 +543,13 @@
         <p>القاهرة · السودان · وعن بُعد حول العالم</p>
       </div>
     </footer>
+
+    <a
+      class="wa-dock"
+      href="https://wa.me/249112066117"
+      rel="noopener"
+      target="_blank"
+      >لنتحدّث</a
+    >
   </body>
 </html>

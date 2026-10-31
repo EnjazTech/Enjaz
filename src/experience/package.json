@@ -1,0 +1,17 @@
+{
+  "name": "enjaz-experience",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "contact": "node tests/contact.mjs",
+    "test": "node tests/run.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "harfbuzzjs": "1.6.4",
+    "playwright": "1.49.0",
+    "three": "0.187.0",
+    "wawoff2": "2.0.1"
+  }
+}
