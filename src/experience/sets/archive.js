@@ -123,12 +123,10 @@ export function createArchive({ programs, text, q, dir }) {
      Galleries and piers
      -------------------------------------------------------------------------- */
 
-  const concrete = [0.42, 0.41, 0.4];
-  const wrap = (period) => `{
-    float period = ${period.toFixed(2)};
-    float d = mod(wp.y - uCamY + period * 0.5, period) - period * 0.5;
-    wp.y = uCamY + d;
-  }`;
+  const concrete = [0.26, 0.25, 0.25];
+  /* Wrap by the instance's own position, never per vertex: an object straddling the
+     boundary would otherwise tear into a band as tall as the period. */
+  const wrap = (period) => `wp.y -= floor((iPos.y - uCamY) / ${period.toFixed(2)} + 0.5) * ${period.toFixed(2)};`;
 
   const galleryBase = part(new BoxGeometry(1, 1, 1));
   const galleryRows = 18;
@@ -258,10 +256,10 @@ export function createArchive({ programs, text, q, dir }) {
           if (aColor.a > 1.5) { tint = aColor.rgb * flip; }`,
         world: `
           {
-            float d = mod(wp.y - uCamY + ${(period / 2).toFixed(2)}, ${period.toFixed(2)}) - ${(period / 2).toFixed(2)};
-            /* Files shrink into the wall at the edges of the wrap, so they never pop. */
-            float edge = smoothstep(${(period / 2).toFixed(2)}, ${(period * 0.36).toFixed(2)}, abs(d));
-            wp.y = uCamY + d;
+            float shift = floor((iPos.y - uCamY) / ${period.toFixed(2)} + 0.5) * ${period.toFixed(2)};
+            /* Files sink into the wall at the edges of the wrap, so they never pop. */
+            float edge = smoothstep(${(period / 2).toFixed(2)}, ${(period * 0.36).toFixed(2)}, abs(iPos.y - shift - uCamY));
+            wp.y -= shift;
             float order = clamp((uOrderY.x - wp.y) / (uOrderY.x - uOrderY.y), 0.0, 1.0);
             if (aColor.a < 1.5) { tint = mix(mix(tint, vec3(0.1, 0.11, 0.13), order * 0.55), vec3(0.075, 0.08, 0.1), vBack); }
             vec3 towardsWall = normalize(vec3(sign(iPos.x) * step(10.0, abs(iPos.x)), 0.0, sign(iPos.z) * step(10.0, abs(iPos.z))) + vec3(0.0001));
@@ -326,11 +324,16 @@ export function createArchive({ programs, text, q, dir }) {
           n = vec3(n.x, n.y * cb - n.z * sb, n.y * sb + n.z * cb);
         }`,
         world: `{
-          float d = mod(wp.y - uCamY - uTime * 0.3 + 12.0, 24.0) - 12.0;
-          wp.y = uCamY + d;
-          wp.x += sin(uTime * 0.2 + seed * 30.0) * uInline * 0.4;
+          float fallen = iPos.y - uTime * 0.3;
+          float y = fallen - floor((fallen - uCamY) / 24.0 + 0.5) * 24.0;
+          vec3 centre = vec3(iPos.x + sin(uTime * 0.2 + seed * 30.0) * uInline * 0.4, y, iPos.z);
           float gone = smoothstep(0.1, 0.6, uTurn);
-          wp.xz += (wp.xz) * gone * 2.0;
+          centre.xz *= 1.0 + gone * 2.0;
+          /* Tumbling paper keeps out of the lens: a huge sheet in the shot is noise. */
+          vec3 fromCam = centre - cameraPosition;
+          float dist = length(fromCam);
+          centre += fromCam / max(dist, 0.001) * max(0.0, 5.0 - dist);
+          wp += centre - iPos;
         }`,
         uniforms: { uTurn: u.uTurn },
       },

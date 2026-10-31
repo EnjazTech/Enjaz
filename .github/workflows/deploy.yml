@@ -30,6 +30,23 @@ jobs:
       - name: Check out the site
         uses: actions/checkout@v4
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Check the film's committed build
+        run: |
+          # The film is built ahead of time and committed, so the deploy stays a
+          # plain rsync. This fails loudly if someone changed src/experience and
+          # forgot to rebuild, or the bundle has outgrown its byte budget.
+          npm ci --prefix src/experience
+          npm run build --prefix src/experience
+          git diff --exit-code assets/js/experience
+          node src/experience/tools/size-gate.mjs
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
       - name: Load the deploy key
         run: |
           mkdir -p ~/.ssh
@@ -48,6 +65,8 @@ jobs:
             --exclude='.git/' \
             --exclude='.github/' \
             --exclude='.gitignore' \
+            --exclude='.vercelignore' \
+            --exclude='src/' \
             --exclude='README.md' \
             --exclude='vercel.json' \
             -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" \

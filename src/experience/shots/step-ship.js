@@ -71,5 +71,7 @@ export default {
     ctx.phone.position.y = 0.2 - drop;
     /* It falls ahead of the camera: as its bead tips over, the screen stays visible. */
     ctx.phone.rotation.x = Math.PI / 2 - smoothstep(0.1, 0.9, p.hold) * (Math.PI / 2) * 0.72;
+    /* The line ends on the phone: it stays attached all the way down. */
+    ctx.sets.strip.setEnd(ctx.self.floorY + ctx.phone.position.y + 0.3);
   },
 };

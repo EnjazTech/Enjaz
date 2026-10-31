@@ -85,10 +85,11 @@ export function watchLayout(onChange) {
     if (w === lastW && h === lastH) {
       return;
     }
-    const heightOnly = w === lastW;
+    /* The URL bar collapsing only changes the height, and nothing here depends on it. */
+    const urlBar = coarse && w === lastW && Math.abs(h - lastH) < 200;
     lastW = w;
     lastH = h;
-    if (!(coarse && heightOnly && Math.abs(h - lastH) < 200)) {
+    if (!urlBar) {
       queue();
     }
   });

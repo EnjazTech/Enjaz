@@ -5,14 +5,6 @@
  */
 
 export default {
-  *build(ctx) {
-    const phone = ctx.sets.phone.make({ w: 0.0775, h: 0.16, t: 0.0085 });
-    phone.position.set(0, 0.0043, 0);
-    ctx.group.add(phone);
-    yield;
-  },
-  layout(ctx) {
-    ctx.group.position.set(0, ctx.solved.deskAct4.y, 0);
-  },
+  *build() {},
   update() {},
 };

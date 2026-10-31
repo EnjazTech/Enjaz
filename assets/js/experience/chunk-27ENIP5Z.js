@@ -1,2 +1,0 @@
-/* three.js r187 (c) three.js authors, MIT. ENJAZ film. */
-import{k as p,l as t}from"./chunk-X7IJIEOY.js";import"./chunk-JHKT6OHR.js";import"./chunk-AEJNSRIJ.js";var d={*build(o){let{sets:e}=o,s=e.phone.make({w:.0775,h:.16,t:.0085});o.group.add(s),o.phone=s,yield},layout(o){o.group.position.set(0,o.solved.deskAct4.y,0)},update(o,e){let s=t(0,1,o.t);e.phone.position.set(0,p(e.self.d*.7,.42,s),0),e.phone.rotation.z=(1-s)*.5*e.dir,e.phone.scale.setScalar(p(3.2,1,s))}};export{d as default};

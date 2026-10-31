@@ -96,10 +96,10 @@ export function instances(base, count, write, extra = {}) {
   const o = { pos: [0, 0, 0], quat: [0, 0, 0, 1], scale: [1, 1, 1], tint: [1, 1, 1], seed: 0, cell: [0, 0, 1, 1], extra: {} };
 
   for (let i = 0; i < count; i += 1) {
-    o.quat[0] = o.quat[1] = o.quat[2] = 0;
-    o.quat[3] = 1;
-    o.scale[0] = o.scale[1] = o.scale[2] = 1;
-    o.tint[0] = o.tint[1] = o.tint[2] = 1;
+    /* Fresh arrays: a writer may assign a shared palette entry to o.tint. */
+    o.quat = [0, 0, 0, 1];
+    o.scale = [1, 1, 1];
+    o.tint = [1, 1, 1];
     o.seed = i / count;
     write(i, o);
     pos.set(o.pos, i * 3);

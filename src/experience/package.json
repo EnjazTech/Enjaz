@@ -5,6 +5,8 @@
   "scripts": {
     "build": "node build.mjs",
     "contact": "node tests/contact.mjs",
+    "stills": "node tools/render-stills.mjs",
+    "wordmark": "node tools/shape-wordmark.mjs",
     "test": "node tests/run.mjs"
   },
   "devDependencies": {

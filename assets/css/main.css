@@ -1142,7 +1142,7 @@ button {
   .wa-dock.is-hidden { opacity: 0; visibility: hidden; }
   body.is-nav-open .wa-dock { visibility: hidden; }
 }
-@media print { .wa-dock, .world, .world-sprites { display: none !important; } }
+@media print { .wa-dock, .world { display: none !important; } }
 
 @media screen {
   /* Still URLs. Nothing downloads until a rule uses one. Use root-absolute paths. */
@@ -1231,8 +1231,7 @@ button {
 
   .world { position: fixed; inset: 0 0 auto; width: 100%; height: 100vh; height: 100lvh; z-index: 1; pointer-events: none; opacity: 0; }
   html.world-on .world { opacity: 1; animation: lamp-on .42s linear both; }
-  html.world-off .world, html.world-off .world-sprites { display: none; }
-  .world-sprites { position: fixed; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
+  html.world-off .world { display: none; }
   @keyframes lamp-on { 0% { opacity: 0 } 18% { opacity: .7 } 30% { opacity: .15 } 55% { opacity: .9 } 65% { opacity: .4 } 100% { opacity: 1 } }
 
   /* Stills mode: today's compact layout with a veiled still behind each zone */

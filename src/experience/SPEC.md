@@ -2,7 +2,7 @@
 
 Branch: `feature/3d-experience`. Do not merge to `main`, because `deploy.yml` publishes on every push to `main`. No visible copy changes. Where this document conflicts with a concept, this document wins.
 
-Nothing in this document has been built yet. Statements marked **measured** were run in Playwright Chromium build 1148 against a scratch copy of the site (Section 14). Frame rates and GPU numbers on real phones are **targets, not measurements**.
+This is the design contract the film was built from. Where the code and this document disagree, the code and the "As built" list below are right. Statements marked **measured** were run in Playwright Chromium build 1148 against a scratch copy of the site (Section 14). Frame rates and GPU numbers on real phones are **targets, not measurements**, and remain unmeasured.
 
 ## Amendments (these override anything below)
 
@@ -16,6 +16,23 @@ Decided by the lead after reading the contract.
 6. **Test server.** `tests/server.mjs` takes `--port` and `--experience-dir`, the latter serving `/assets/js/experience/` from another folder, so parallel work can test its own build.
 7. **Generated test output** goes in `src/experience/test-results/`, which is gitignored. Do not write screenshots or reports anywhere else in the repo.
 8. **Authoring rule for shots.** Every `*.meta.js` budget in Section 4 is a ceiling, not a target. Silhouette and light matter more than triangle count. Avoid anything that reads as programmer art: a prop must be recognisable as its real-world object from its outline alone at its shot's camera distance.
+
+## As built
+
+Where the build departed from the contract below, and why.
+
+- **One builder, not ten workstreams.** So there is no parallel-work file split: `programs.js` holds all six programs, `sets/props.js` all the props, and `shots/metas.js` the whole shot table rather than 20 `*.meta.js` files. No independent verifier reviewed this; the acceptance suite was written by the same author as the code.
+- **Program count.** Amendment 3 set a ceiling of 16. The deform variants need 41 to 44, so E2 asserts 48. They still compile at idle before they are visible, never mid-flight.
+- **Budgets.** Tier ceilings are enforced by E2 (Tier L peaks at 26 draws and 58k triangles). The per-shot draw numbers in Section 4 were not achievable as written and are not enforced.
+- **Cut, in the contract's own cut order:** foreground sprites, and the mirrored reflections except the Talk step on Tiers M and H.
+- **Free rect.** On landscape the subject always stands beside the copy, never above it, even when the rect above is larger. That keeps RTL a true mirror.
+- **First floor.** `svc.web` sits 30 m below the slab rather than 12 m, so the first look down the atrium has depth.
+- **Fog** uses view depth rather than radial distance, because it interpolates exactly across the huge wall quads.
+- **The mint line** keeps a constant apparent width near the camera, or it becomes a wedge that fills the frame.
+- **Everything that wraps around the camera wraps by instance position**, never per vertex, or an object straddling the boundary tears into a band as tall as the period.
+- **Watchdog** collapses to stills after 20 s rather than holding the tall layout, following the collapse rule in Section 8.
+- **Story state** (turnover, clear, dawn, clock, ring, the last act's phone) lives in `world.js`, not in shots, because an anchor jump skips shots.
+
 
 ## 0. Decisions at a glance
 

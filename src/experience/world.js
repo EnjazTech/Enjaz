@@ -91,7 +91,6 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed 
     uPowerY: { value: 0 },
     uLitY: { value: new Vector2(WORLD.slabBottom, -120) },
     uFog: { value: new Vector2(4, 40) },
-    uCull: { value: 1 },
     uLampOrigin: { value: new Vector3() },
     uLampPos: { value: new Vector3(0.5 * dir, 0.62, -0.62) },
     uLampDir: { value: new Vector3(0, -1, 0) },
@@ -108,6 +107,9 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed 
   const archive = createArchive({ programs, shared, text, q, dir, tier });
   const phone = createPhone({ programs, shared, text, dir });
   const sets = { desk, archive, strip, phone };
+
+  /* One phone for the whole last act, at real size. Its state is a function of y. */
+  desk.setPhone(phone.make({ w: 0.0775, h: 0.16, t: 0.0085 }));
 
   scene.add(desk.group, archive.group, strip.mesh, strip.halo);
 
@@ -419,6 +421,24 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed 
       desk.setRing(1 - progress(list.pinStart, list.pinStart + (list.pinEnd - list.pinStart) * 0.5));
     }
 
+    /* The phone falls down its line, lands, and later turns under the CTA panel. */
+    const heroPhone = desk.phone;
+    heroPhone.visible = y > deskFlipY;
+    strip.setEnd(-Infinity);
+    if (y > deskFlipY) {
+      const qShot = layout.shots["why.q"];
+      const height = solved["why.q"].d * 0.62;
+      const fallen = eased(progress(layout.shots.fall.pinEnd - (layout.shots.fall.pinEnd - deskFlipY) * 0.2, qShot.pinEnd));
+      const landing = eased(progress(list.pinStart, list.pinStart + (list.pinEnd - list.pinStart) * 0.14));
+      const above = height + (0.42 - height) * fallen;
+      const py = above + (0.0043 - above) * landing;
+      heroPhone.position.y = py;
+      const size = 2.1 + (1 - 2.1) * fallen;
+      heroPhone.scale.setScalar(size);
+      heroPhone.rotation.y = layout.portrait ? 0 : (Math.PI / 2) * eased(progress(stats.pinEnd, cta.pinStart));
+      strip.setEnd(desk.group.position.y + py + 0.01);
+    }
+
     const rescue = runtimes.find((runtime) => runtime.meta.id === "svc.rescue");
     if (y < rescue.a || y > rescue.b) {
       shared.uPower.value.set(0, 0);
@@ -454,11 +474,10 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed 
     desk.group.visible = deskVisible;
     desk.setAct(act);
     archive.group.visible = y > archiveOnY && y < archiveOffY;
-    shared.uLampOn.value = deskVisible ? 1 : 0;
+    shared.uLampOn.value = deskVisible ? 1 - shared.uDawn.value * 0.72 : 0;
     shared.uLampOrigin.value.copy(desk.group.position);
     shared.uLampColor.value.set(1, 0.7, 0.42);
 
-    strip.focus(sample[1], sample[9]);
     strip.u.uFeed.value = y * 0.00018;
     fillP(runtimes[0], dt);
     if (deskVisible) {
@@ -475,6 +494,9 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed 
         runtime.group.visible = inRange;
       }
     }
+
+    /* After the shots, because they decide where the line ends. */
+    strip.focus(sample[1], sample[9]);
 
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld();
@@ -706,7 +728,6 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed 
 
   const unwatch = watchLayout(() => {
     bake();
-    desk.bakeShadow(renderer);
     needsFrame = true;
   });
 
@@ -721,6 +742,7 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed 
     tier,
     renderer,
     governor,
+    scene,
     stop,
     get layout() {
       return layout;
@@ -756,6 +778,15 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed 
         rung: governor.rung,
         y,
       };
+    },
+    /** The scene's own numbers: a post chain adds passes that are not its cost. */
+    sceneInfo() {
+      const chain = film;
+      film = null;
+      draw(0.016);
+      const info = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles };
+      film = chain;
+      return info;
     },
     feedFrameTimes(list) {
       list.forEach((value) => governor.push(value));

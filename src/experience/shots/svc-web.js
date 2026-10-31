@@ -4,8 +4,8 @@
  * "visitors into customers", with no words.
  */
 
-import { BoxGeometry, Mesh, PlaneGeometry, Shape, ShapeGeometry } from "three";
-import { box, instances, merge, part, quatEuler, smoothstep } from "../engine/geo.js";
+import { Mesh, PlaneGeometry, Shape, ShapeGeometry } from "three";
+import { box, instances, merge, quatEuler, smoothstep } from "../engine/geo.js";
 import { gantryParts } from "../sets/gantry.js";
 
 const W = 0.92;
@@ -151,7 +151,6 @@ export default {
       deform: {
         pars: `uniform float uWalk; out float vDone;`,
         fpars: `in float vDone;`,
-        local: `p.y *= 1.0;`,
         world: `{
           /* Along the pavement in reading direction, then in through the door. */
           float t = fract(seed + uWalk);
@@ -182,8 +181,6 @@ export default {
     ctx.walk = figuresMaterial.uniforms.uWalk;
     ctx.boost = 0;
     ctx.hotspots.add({ id: "shop", center: [0, -0.2, 0.5], radius: 140 });
-    void BoxGeometry;
-    void part;
     yield;
   },
   update(p, ctx) {

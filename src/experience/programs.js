@@ -18,7 +18,6 @@ import {
   LinearFilter,
   LinearMipmapLinearFilter,
   NoColorSpace,
-  NormalBlending,
   RawShaderMaterial,
   RepeatWrapping,
 } from "three";
@@ -27,7 +26,7 @@ const V_COMMON = /* glsl */ `
 precision highp float;
 uniform mat4 modelMatrix, viewMatrix, projectionMatrix;
 uniform vec3 cameraPosition, uLampOrigin;
-uniform float uTime, uInline, uCamY, uDawn, uPowerY, uHouse, uCull;
+uniform float uTime, uInline, uCamY, uDawn, uPowerY, uHouse;
 uniform vec2 uPower, uLitY, uFog;
 
 vec3 qrot(vec4 q, vec3 v) { return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v); }
@@ -309,17 +308,19 @@ void main() {
   wp.z += sin(s * 2.1 + uTime * 0.9) * 0.012 * air;
   wp.x += sin(s * 1.3 + uTime * 0.6) * 0.008 * air * uInline;
   float lineMix = smoothstep(uLine, uLine + uLineLen, s);
-  vec3 across = aAcross * aW * aSide;
-  wp += across;
+  /* The line keeps an apparent width: close to the camera it must not become a wedge. */
+  float viewZ = max(-(viewMatrix * vec4(wp, 1.0)).z, 0.05);
+  float halfWidth = mix(aW, min(aW, viewZ * 0.0038), lineMix);
+  wp += aAcross * halfWidth * aSide;
   //#world
   gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
   vec3 wn = normalize(cross(aAcross, vec3(0.0, 1.0, 0.0)) + vec3(0.0, 0.25, 0.0));
   vUv = vec2(aSide, s - uFeed);
-  vW = aW;
+  vW = halfWidth;
   vS = s;
   vLineMix = lineMix;
   vLampP = wp - uLampOrigin;
-  vHouse = buildingLight(wp.y, wn) + vec3(0.04);
+  vHouse = buildingLight(wp.y, wn) * 0.62 + vec3(0.03);
   vFog = fogAt(wp) * (1.0 - lineMix);
 }`;
 
@@ -593,9 +594,6 @@ export function createPrograms(shared) {
         uHouse: { value: 0 },
       }, { transparent: true, depthWrite: false, blending: AdditiveBlending, ...omit(options, ["color", "alpha"]) });
     },
-
-    /* Opaque blend for things that fade via uAlpha without additive light. */
-    normalBlending: NormalBlending,
   };
 }
 

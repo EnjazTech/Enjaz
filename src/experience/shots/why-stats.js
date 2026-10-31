@@ -9,10 +9,7 @@ import { lerp, smoothstep } from "../engine/geo.js";
 
 export default {
   *build(ctx) {
-    const { sets, programs, text, dir } = ctx;
-    const phone = sets.phone.make({ w: 0.0775, h: 0.16, t: 0.0085 });
-    phone.position.set(0, 0.0043, 0);
-    ctx.group.add(phone);
+    const { programs, text, dir } = ctx;
 
     /* The one stamped page that stays on the desk. */
     const plane = new PlaneGeometry(0.21, 0.297);

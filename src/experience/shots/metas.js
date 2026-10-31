@@ -84,7 +84,7 @@ export const METAS = [
     act: 2,
     set: "archive",
     floor: "locked",
-    subject: { radius: 1.4, center: [0, 0, 0] },
+    subject: { radius: 1.75, center: [0, 0.35, 0.3] },
     pose: { lens: 32, bearing: -18, elevation: 14, drift: [0, -0.2, -0.3], clip: [0.3, 80], fog: 60 },
     budget: { draws: 14, tris: { L: 30000, M: 80000, H: 180000 } },
     idleHz: 0,
@@ -142,7 +142,7 @@ export const METAS = [
     act: 3,
     set: "archive",
     floor: { clear: 5 },
-    subject: { radius: 1, center: [0, 0, 0] },
+    subject: { radius: 1.5, center: [0, 0.1, 0] },
     pose: { lens: 28, bearing: 8, elevation: -10, clip: [0.2, 70], fog: 42 },
     budget: { draws: 10, tris: { L: 25000, M: 70000, H: 160000 } },
     idleHz: 0,
@@ -152,7 +152,7 @@ export const METAS = [
     act: 3,
     set: "archive",
     floor: "locked",
-    subject: { radius: 1, center: [0, 0, 0] },
+    subject: { radius: 1.75, center: [0, 0, 0] },
     pose: { lens: 28, bearing: -6, elevation: -24, clip: [0.2, 70], fog: 40 },
     budget: { draws: 8, tris: { L: 22000, M: 60000, H: 140000 } },
     idleHz: 0,
@@ -162,7 +162,7 @@ export const METAS = [
     act: 3,
     set: "archive",
     floor: "locked",
-    subject: { radius: 1, center: [0, 0, 0] },
+    subject: { radius: 1.25, center: [0, 0, 0.3] },
     pose: { lens: 28, bearing: [20, -10], elevation: -8, clip: [0.2, 70], fog: 40 },
     budget: { draws: 9, tris: { L: 26000, M: 70000, H: 160000 } },
     idleHz: 0,
@@ -172,7 +172,7 @@ export const METAS = [
     act: 3,
     set: "archive",
     floor: "locked",
-    subject: { radius: 0.9, center: [0, 0, 0] },
+    subject: { radius: 1.6, center: [0, -0.2, 0] },
     pose: { lens: 28, elevation: [-12, -74], clip: [0.2, 70], fog: 40 },
     budget: { draws: 7, tris: { L: 22000, M: 60000, H: 140000 } },
     idleHz: 0,
@@ -235,7 +235,7 @@ export const METAS = [
     pose: { lens: 40, elevation: -90, clip: [0.02, 12], fog: 26 },
     /* Solved so the 3D phone's screen sits exactly behind the real panel. */
     solve(s, layout) {
-      const { W, H, portrait, svh } = layout;
+      const { W, H, portrait } = layout;
       const caption = s.shot.caption;
       const fov = (s.fov * Math.PI) / 180;
       const tanH = Math.tan(fov / 2) * (W / H);
@@ -252,7 +252,6 @@ export const METAS = [
         s.ox = W / 2 - (caption.x + caption.w / 2);
         s.oy = H / 2 - (caption.y + caption.h / 2);
       }
-      void svh;
     },
     budget: { draws: 12, tris: { L: 14000, M: 60000, H: 140000 } },
     idleHz: 0,

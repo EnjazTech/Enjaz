@@ -4,9 +4,8 @@
  * the object's footprint centre, resting on y = 0.
  */
 
-import { CylinderGeometry, Group, LatheGeometry, Mesh, TorusGeometry, TubeGeometry, Vector2, Vector3, CatmullRomCurve3, BoxGeometry } from "three";
-import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { box, BRASS, cylinder, GRAPHITE, merge, part, UNLIT } from "../engine/geo.js";
+import { BoxGeometry, CatmullRomCurve3, CylinderGeometry, LatheGeometry, Mesh, TorusGeometry, TubeGeometry, Vector2, Vector3 } from "three";
+import { box, BRASS, cylinder, merge, part, UNLIT } from "../engine/geo.js";
 
 /** A rectangular bar from point a to point b. */
 export function beam(a, b, thickness, options) {
@@ -71,8 +70,7 @@ export function lampParts(baseAt, elbow, head, dir) {
     ];
   };
   const shade = new CylinderGeometry(0.038, 0.105, 0.15, 28, 1, true);
-  const shadeUp = new Vector3(0, 1, 0);
-  return [
+    return [
     cylinder(0.09, 0.098, 0.022, 24, { at: [base[0], base[1] + 0.011, base[2]], color: [0.26, 0.22, 0.17], mat: BRASS }),
     ...rods([base[0], base[1] + 0.02, base[2]], elbow),
     ...rods(elbow, head),
@@ -86,7 +84,6 @@ export function lampParts(baseAt, elbow, head, dir) {
       mesh.quaternion.setFromAxisAngle(tiltAxis, 0.42 * dir);
       mesh.updateMatrix();
       shade.applyMatrix4(mesh.matrix);
-      shadeUp.set(0, 1, 0);
       return part(shade, { color: [1.9, 1.4, 0.8], mat: BRASS });
     })(),
     cylinder(0.038, 0.038, 0.03, 16, { at: [head[0] + 0.022 * dir, head[1] + 0.03, head[2]], rot: [0, 0, 0.42 * dir], color: [0.5, 0.36, 0.2], mat: BRASS }),
@@ -216,5 +213,3 @@ export function cabinetParts(at, tint) {
   }
   return parts;
 }
-
-export { Group, RoundedBoxGeometry, GRAPHITE };

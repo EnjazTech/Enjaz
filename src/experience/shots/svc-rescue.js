@@ -4,8 +4,8 @@
  * Your cursor is the torch. An arm clears the jam and the lights come back.
  */
 
-import { BoxGeometry, InstancedBufferGeometry, Mesh, PlaneGeometry, Vector3 } from "three";
-import { box, instances, merge, part, smoothstep } from "../engine/geo.js";
+import { Mesh, PlaneGeometry, Vector3 } from "three";
+import { box, instances, merge, smoothstep } from "../engine/geo.js";
 import { gantryParts } from "../sets/gantry.js";
 import { mangleParts, rollerGeometry } from "../sets/props.js";
 
@@ -13,7 +13,7 @@ const TORCH_ORIGIN = new Vector3();
 
 export default {
   *build(ctx) {
-    const { programs, rng, q } = ctx;
+    const { programs, rng } = ctx;
     const frame = new Mesh(merge([...mangleParts(), ...gantryParts()]), programs.solid({ ambient: 0.08 }));
     ctx.group.add(frame);
     yield;
@@ -83,12 +83,6 @@ export default {
     sparks.frustumCulled = false;
     ctx.group.add(sparks);
     ctx.sparks = sparks;
-    ctx.hit = false;
-    ctx.torch = new Vector3();
-    void q;
-    void BoxGeometry;
-    void InstancedBufferGeometry;
-    void part;
     yield;
   },
   update(p, ctx) {
@@ -129,14 +123,15 @@ export default {
     /* The torch reuses the lamp: mint, from the camera's side. Fine pointers aim it. */
     if (dark > 0.01) {
       uLampOn.value = dark;
-      uLampColor.value.set(0.42, 1, 0.88);
+      /* Metres from the machine rather than centimetres from a desk: far more gain. */
+      uLampColor.value.set(2.8, 6.6, 5.8);
       uLampOrigin.value.set(0, floorY, 0);
       const sweepX = p.pointer === 1 ? p.px * 1.7 : Math.sin(p.time * 0.55) * 1.3;
       const sweepY = p.pointer === 1 ? -p.py * 1.3 : Math.cos(p.time * 0.4) * 0.7;
       TORCH_ORIGIN.set(ctx.dir * 0.9, 1.5, 3.4);
       uLampPos.value.copy(TORCH_ORIGIN);
       uLampDir.value.set(sweepX - TORCH_ORIGIN.x, sweepY - TORCH_ORIGIN.y, -TORCH_ORIGIN.z).normalize();
-      uLampCone.value.set(0.965, 0.995);
+      uLampCone.value.set(0.94, 0.99);
     }
   },
 };

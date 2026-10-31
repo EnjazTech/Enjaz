@@ -14,7 +14,7 @@ export default {
     const { programs, sets, rng } = ctx;
 
     /* The logo's three chevrons, rotated to point down, on all four walls. */
-    const stroke = new PlaneGeometry(0.34, 0.05);
+    const stroke = new PlaneGeometry(0.62, 0.1);
     const chevrons = 96;
     const palette = [
       [0.365 * 0.35, 1 * 0.35, 0.87 * 0.35],
@@ -24,7 +24,7 @@ export default {
     const ticks = new Mesh(
       instances(stroke, chevrons, (i, o) => {
         const wall = i % 4;
-        const across = (Math.floor(i / 8) % 3 - 1) * 1.9 + (i % 2 ? 0.115 : -0.115);
+        const across = (Math.floor(i / 8) % 3 - 1) * 1.9 + (i % 2 ? 0.215 : -0.215);
         const y = -((Math.floor(i / 24) + (Math.floor(i / 8) % 3) * 0.08) * (PERIOD / 4));
         const halfW = 3.2;
         const sign = i % 2 ? 1 : -1;
@@ -49,7 +49,7 @@ export default {
         shape: 5,
         defines: { INSTANCED: 1, NOFOG: 1 },
         deform: {
-          world: `{ float d = mod(wp.y - uCamY + ${(PERIOD / 2).toFixed(1)}, ${PERIOD.toFixed(1)}) - ${(PERIOD / 2).toFixed(1)}; wp.y = uCamY + d; }`,
+          world: `wp.y -= floor((iPos.y - uCamY) / ${PERIOD.toFixed(1)} + 0.5) * ${PERIOD.toFixed(1)};`,
         },
       })
     );
@@ -97,6 +97,7 @@ export default {
     const camY = ctx.u.uCamY.value;
     /* Below the camera, falling with you, until it punches through the tile. */
     ctx.phone.position.set(0, Math.max(ctx.ceilingY - 1.2 + (1 - p.hold) * 0, camY - 3.2), 0);
+    ctx.sets.strip.setEnd(ctx.phone.position.y + 0.2);
     ctx.ceiling.visible = p.hold > 0.4;
     ctx.ticks.visible = p.hold < 0.82;
   },

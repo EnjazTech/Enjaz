@@ -67,7 +67,10 @@ export function createStrip({ programs, shared, printTexture, dir }) {
       deform: {
         pars: `in vec3 aAcross; in float aSide, aS, aW; uniform float uLine, uLineLen; out float vSide, vAlive;`,
         fpars: `in float vSide, vAlive;`,
-        local: `p += aAcross * aSide * max(aW * 5.0, 0.16);`,
+        local: `{
+          float z = max(-(viewMatrix * vec4(p, 1.0)).z, 0.05);
+          p += aAcross * aSide * min(max(aW * 5.0, 0.16), z * 0.02);
+        }`,
         world: `vSide = aSide; vAlive = smoothstep(uLine + uLineLen * 0.7, uLine + uLineLen, aS);`,
         frag: `a = (1.0 - abs(vSide)); a = a * a * vAlive;`,
         uniforms: { uLine: u.uLine, uLineLen: u.uLineLen },
@@ -80,7 +83,6 @@ export function createStrip({ programs, shared, printTexture, dir }) {
   const ringS = new Float32Array(MAX_RINGS);
   const ringY = new Float32Array(MAX_RINGS);
   let rings = 0;
-  let verticalFrom = 0;
   let verticalS = 0;
   let verticalY = 0;
 
@@ -149,7 +151,6 @@ export function createStrip({ programs, shared, printTexture, dir }) {
     }
 
     /* The long fall: straight down x=0, z=0. Dense rings only where effects need them. */
-    verticalFrom = rings;
     verticalS = s;
     verticalY = last[1];
     let y = last[1];
@@ -208,11 +209,13 @@ export function createStrip({ programs, shared, printTexture, dir }) {
     return lo;
   }
 
-  /** Limits drawing to rings near the camera. */
+  let endY = -Infinity;
+
+  /** Limits drawing to rings near the camera, and to the end of the line. */
   function focus(cameraY, far) {
     const top = cameraY + far;
     const start = top > verticalY ? 0 : ringAtS(sAtY(top));
-    const end = ringAtS(sAtY(cameraY - far));
+    const end = ringAtS(sAtY(Math.max(cameraY - far, endY)));
     const count = Math.max(0, end - start) * 6;
     geometry.setDrawRange(start * 6, count);
   }
@@ -223,6 +226,10 @@ export function createStrip({ programs, shared, printTexture, dir }) {
     u,
     rebuild,
     focus,
+    /** Where the line ends: on the phone, once the phone is on it. */
+    setEnd(y) {
+      endY = y;
+    },
     sAtY,
     /** World position at height y on the vertical stretch, which is x=0, z=0. */
     pointAtY(y, out) {
@@ -230,12 +237,6 @@ export function createStrip({ programs, shared, printTexture, dir }) {
       out[1] = y;
       out[2] = 0;
       return out;
-    },
-    get rings() {
-      return rings;
-    },
-    verticalFrom() {
-      return verticalFrom;
     },
   };
 }

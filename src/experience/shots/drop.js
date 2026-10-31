@@ -104,6 +104,6 @@ export default {
     ctx.slide.value = Math.min(1, Math.max(0, (p.t - 0.38) / 0.42));
     /* Backlit by the lamp above: the paper glows and the ink reads through it. */
     const strip = ctx.sets.strip;
-    strip.u.uPaperGlow.value = 0.22 + 0.52 * Math.sin(Math.min(1, p.t * 1.5) * Math.PI);
+    strip.u.uPaperGlow.value = 0.2 + 0.28 * Math.sin(Math.min(1, p.t * 1.5) * Math.PI);
   },
 };

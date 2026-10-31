@@ -40,13 +40,14 @@ export default {
       ambient: 0.14,
       defines: { INSTANCED: 1 },
       deform: {
-        pars: `uniform float uLand; uniform vec2 uStir; in vec3 iSlab;`,
+        pars: `uniform float uLand; uniform vec2 uStir;`,
         local: `{
-          float spin = uTime * 0.6 + seed * 50.0;
-          float cs = cos(spin), ss = sin(spin);
+          /* Tumbling while it circles; flat once it lands. */
           float settle = clamp((uLand - seed * 0.8) / 0.2, 0.0, 1.0);
-          float k = 1.0 - settle;
-          p = vec3(p.x, p.y * cs * k + p.y * (1.0 - k), p.y * ss * k);
+          float spin = (uTime * 0.6 + seed * 50.0) * (1.0 - settle);
+          float cs = cos(spin), ss = sin(spin);
+          p = vec3(p.x, p.y * cs, p.y * ss);
+          n = vec3(n.x, n.y * cs - n.z * ss, n.y * ss + n.z * cs);
         }`,
         world: `{
           float settle = clamp((uLand - seed * 0.8) / 0.2, 0.0, 1.0);
@@ -55,13 +56,9 @@ export default {
           float r = 1.3 + seed * 1.15 - uLand * 0.4;
           vec3 orbit = vec3(cos(a) * r, sin(a * 1.7) * 1.05 + (seed - 0.5) * 1.2, sin(a) * r * 0.74 + 0.4);
           orbit.xy += normalize(orbit.xy + 0.001) * max(0.0, 0.5 - length(orbit.xy - uStir)) * 0.9;
-          vec3 home = wp;
-          wp = mix(orbit + (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz, home, settle);
-          /* Landed sheets have become rows: they are gone. */
-          wp += (home - wp) * step(0.999, settle);
-          float vanish = 1.0 - smoothstep(0.92, 1.0, settle);
-          wp = mix(home + (wp - home) * 0.0, wp, 1.0);
-          tint *= vanish;
+          wp = mix(orbit + (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz, wp, settle);
+          /* A landed sheet has become a row on the screen: it shrinks into the slab. */
+          tint *= 1.0 - smoothstep(0.86, 1.0, settle);
         }`,
         uniforms: { uLand: { value: 0 }, uStir: { value: [0, 0] } },
       },
@@ -77,9 +74,7 @@ export default {
           const shade = 0.82 + rng() * 0.18;
           o.tint = [shade, shade, shade * 0.95];
           o.seed = i / count;
-          o.extra.iSlab = [0, 0, 0];
-        },
-        { iSlab: 3 }
+        }
       ),
       material
     );

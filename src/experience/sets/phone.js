@@ -5,37 +5,38 @@
 
 import { BoxGeometry, EdgesGeometry, Group, LineSegments, Mesh, PlaneGeometry } from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { box, instances, merge, part, seeded } from "../engine/geo.js";
+import { box, merge, part, seeded } from "../engine/geo.js";
 
-const BODY = [0.1, 0.105, 0.125];
+const BODY = [0.2, 0.21, 0.25];
 const MINT = [0.365, 1, 0.87];
 
 export function createPhone({ programs, text, dir }) {
   const bodyGeometry = (w, h, t) => part(new RoundedBoxGeometry(w, h, t, 4, Math.min(t * 0.45, w * 0.12)), { color: BODY });
 
+  let defaultScreen = null;
+
   /** Default framing: lying on its back in XZ, screen up, 1 unit = 1 m. */
   function make({ w = 0.78, h = 1.6, t = 0.09, emissive = 1 } = {}) {
     const group = new Group();
-    const body = new Mesh(bodyGeometry(w, t, h), programs.solid({ ambient: 0.13, house: 1 }));
-    group.add(body);
-    /* Bezel highlight: a thin brass line around the screen says "expensive phone". */
-    const frame = new Mesh(
+    /* The bezel highlight is a thin bright line around the screen. */
+    const body = new Mesh(
       merge([
-        box(w * 0.965, 0.002, 0.006, { at: [0, t / 2 + 0.001, -h * 0.482], color: [0.7, 0.72, 0.76], mat: 1 }),
-        box(w * 0.965, 0.002, 0.006, { at: [0, t / 2 + 0.001, h * 0.482], color: [0.7, 0.72, 0.76], mat: 1 }),
-        box(0.006, 0.002, h * 0.965, { at: [-w * 0.482, t / 2 + 0.001, 0], color: [0.7, 0.72, 0.76], mat: 1 }),
-        box(0.006, 0.002, h * 0.965, { at: [w * 0.482, t / 2 + 0.001, 0], color: [0.7, 0.72, 0.76], mat: 1 }),
+        bodyGeometry(w, t, h),
+        box(w * 0.965, t * 0.02, w * 0.012, { at: [0, t / 2 + 0.001, -h * 0.482], color: [0.7, 0.72, 0.76], mat: 1 }),
+        box(w * 0.965, t * 0.02, w * 0.012, { at: [0, t / 2 + 0.001, h * 0.482], color: [0.7, 0.72, 0.76], mat: 1 }),
+        box(w * 0.012, t * 0.02, h * 0.965, { at: [-w * 0.482, t / 2 + 0.001, 0], color: [0.7, 0.72, 0.76], mat: 1 }),
+        box(w * 0.012, t * 0.02, h * 0.965, { at: [w * 0.482, t / 2 + 0.001, 0], color: [0.7, 0.72, 0.76], mat: 1 }),
       ]),
-      programs.solid({ ambient: 0.2, house: 0 })
+      programs.solid({ ambient: 0.32, house: 1 })
     );
-    group.add(frame);
+    group.add(body);
 
     const screenPlane = new PlaneGeometry(w * 0.94, h * 0.96);
     screenPlane.rotateX(-Math.PI / 2);
     screenPlane.translate(0, t / 2 + 0.003, 0);
+    defaultScreen ??= listTexture(360, 720, 12);
     const screenMaterial = programs.paper({
-      atlas: { value: text.texture },
-      cell: [0, 0, 1, 1],
+      atlas: { value: defaultScreen },
       house: 0,
       ambient: emissive,
       defines: {},
@@ -48,7 +49,8 @@ export function createPhone({ programs, text, dir }) {
 
   /** Wireframe of the same outline. */
   function wire({ w = 0.78, h = 1.6, t = 0.09, color = MINT, alpha = 0.9 } = {}) {
-    const edges = new EdgesGeometry(new RoundedBoxGeometry(w, t, h, 2, Math.min(t * 0.45, w * 0.12)), 30);
+    /* Fine enough that each rounded corner keeps its ribs: a shallow angle filter drops them. */
+    const edges = new EdgesGeometry(new RoundedBoxGeometry(w, t, h, 3, Math.min(t * 0.45, w * 0.12)), 10);
     return new LineSegments(edges, programs.wire({ color, alpha }));
   }
 
@@ -109,5 +111,5 @@ export function createPhone({ programs, text, dir }) {
     });
   }
 
-  return { make, wire, layers, listTexture, instances };
+  return { make, wire, layers, listTexture };
 }

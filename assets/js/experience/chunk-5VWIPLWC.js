@@ -1,2 +1,0 @@
-/* three.js r187 (c) three.js authors, MIT. ENJAZ film. */
-import{d as o}from"./chunk-X7IJIEOY.js";var t=[.34,.35,.38];function a(r=-1.25,c=23.2){return[o(c,.2,.18,{at:[0,r,1.05],color:t}),o(c,.2,.18,{at:[0,r,-1.05],color:t}),o(c,.05,.28,{at:[0,r+.12,1.05],color:t}),o(c,.05,.28,{at:[0,r+.12,-1.05],color:t}),o(.16,.14,2.1,{at:[-2.2,r,0],color:t}),o(.16,.14,2.1,{at:[2.2,r,0],color:t}),o(.16,.14,2.1,{at:[-5.6,r,0],color:t}),o(.16,.14,2.1,{at:[5.6,r,0],color:t})]}export{a};

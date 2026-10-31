@@ -220,20 +220,27 @@ function initDock() {
     return;
   }
 
+  /* Only a button you can actually tap counts: one sliding under the nav does not. */
+  const nav = document.querySelector("[data-nav]");
+  const navHeight = nav ? Math.ceil(nav.getBoundingClientRect().height) : 0;
+
   const onScreen = new Set();
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach((entry) => {
-      if (entry.isIntersecting) {
-        onScreen.add(entry.target);
-      } else {
-        onScreen.delete(entry.target);
-      }
-    });
-    dock.classList.toggle("is-hidden", onScreen.size > 0);
-  });
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          onScreen.add(entry.target);
+        } else {
+          onScreen.delete(entry.target);
+        }
+      });
+      dock.classList.toggle("is-hidden", onScreen.size > 0);
+    },
+    { threshold: 0.9, rootMargin: `-${navHeight}px 0px 0px 0px` }
+  );
 
   document
-    .querySelectorAll(".hero__actions, .cta__action")
+    .querySelectorAll('.hero__actions a[href*="wa.me"], .cta__action')
     .forEach((element) => observer.observe(element));
 }
 

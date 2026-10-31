@@ -19,11 +19,10 @@ import {
   Vector3,
   WebGLRenderTarget,
 } from "three";
-import { box, clamp01, instances, merge, part, quatEuler, seeded, smoothstep } from "../engine/geo.js";
+import { box, clamp01, instances, merge, part, quatEuler, seeded } from "../engine/geo.js";
 import { WORLD } from "../engine/rail.js";
 import { canvasTexture } from "../programs.js";
 import {
-  beam,
   clockParts,
   cordGeometry,
   handsetGeometry,
@@ -136,19 +135,21 @@ export function createDesk({ programs, shared, text, q, dir }) {
   const reflectUniforms = { ...woodUniforms, uTint: { value: [0.34, 0.31, 0.28] }, uGloss: { value: 0 }, uRings: { value: [0, 0, 0, 0] } };
   /* Floorboards, with the hole years of paperwork have torn in them. */
   const hole = 0.5;
-  const floorMaterial = programs.wood({ uniforms: reflectUniforms });
-  const floorParts = [
-    [0, -hole - 2.5, 10, 5],
-    [0, hole + 2.5, 10, 5],
-    [-hole - 2.5, 0, 5, hole * 2],
-    [hole + 2.5, 0, 5, hole * 2],
-  ].map(([x, z, w, d]) => {
-    const geometry = new BoxGeometry(w, 0.1, d);
-    geometry.translate(x, WORLD.floorY - 0.05, z);
-    return geometry;
-  });
-  const floors = new Group();
-  floorParts.forEach((geometry) => floors.add(new Mesh(geometry, floorMaterial)));
+  const floors = new Mesh(
+    merge(
+      [
+        [0, -hole - 2.5, 10, 5],
+        [0, hole + 2.5, 10, 5],
+        [-hole - 2.5, 0, 5, hole * 2],
+        [hole + 2.5, 0, 5, hole * 2],
+      ].map(([x, z, w, d]) => {
+        const geometry = new BoxGeometry(w, 0.1, d);
+        geometry.translate(x, WORLD.floorY - 0.05, z);
+        return geometry;
+      })
+    ),
+    programs.wood({ uniforms: reflectUniforms })
+  );
   group.add(floors);
 
   /* --------------------------------------------------------------------------
@@ -199,28 +200,23 @@ export function createDesk({ programs, shared, text, q, dir }) {
 
   /* Printer and landline leave the desk as whole objects, on their checklist line. */
   const printer = new Mesh(merge(printerParts(printerAt, dir)), staticMesh.material);
-  const landlineBase = new Mesh(merge(landlineBaseParts(landlineAt)), staticMesh.material);
+  const cordParts = cordGeometry(
+    [
+      [landlineAt[0] - 0.11 * dir, 0.05, landlineAt[2] + 0.03],
+      [landlineAt[0] - 0.17 * dir, 0.03, landlineAt[2] + 0.06],
+      [landlineAt[0] - 0.2 * dir, 0.012, landlineAt[2] + 0.13],
+      [landlineAt[0] - 0.19 * dir, 0.05, landlineAt[2] - 0.03],
+      [landlineAt[0] - 0.13 * dir, 0.11, landlineAt[2] - 0.08],
+    ],
+    24
+  );
+  const landlineBase = new Mesh(merge([...landlineBaseParts(landlineAt), cordParts]), staticMesh.material);
   group.add(printer, landlineBase);
 
   /* The handset rings on its cradle; the shot shakes it off the hook. */
   const handset = new Mesh(handsetGeometry(), staticMesh.material);
   handset.position.set(landlineAt[0], 0.135, landlineAt[2] - 0.08);
   group.add(handset);
-
-  const cord = new Mesh(
-    cordGeometry(
-      [
-        [landlineAt[0] - 0.11 * dir, 0.05, landlineAt[2] + 0.03],
-        [landlineAt[0] - 0.17 * dir, 0.03, landlineAt[2] + 0.06],
-        [landlineAt[0] - 0.2 * dir, 0.012, landlineAt[2] + 0.13],
-        [landlineAt[0] - 0.19 * dir, 0.05, landlineAt[2] - 0.03],
-        [landlineAt[0] - 0.13 * dir, 0.11, landlineAt[2] - 0.08],
-      ],
-      24
-    ),
-    staticMesh.material
-  );
-  group.add(cord);
 
   /* Clock hands: 03:12 at night, 07:00 at dawn. */
   const handMaterial = staticMesh.material;
@@ -304,8 +300,7 @@ export function createDesk({ programs, shared, text, q, dir }) {
   const stackBase = new BoxGeometry(1, 1, 1);
   stackBase.deleteAttribute("uv");
   const stackGeometry = part(stackBase);
-  const clearStack = { iClear: 1 };
-  const stacks = new Mesh(
+    const stacks = new Mesh(
     instances(
       stackGeometry,
       stackPlacements.length,
@@ -318,7 +313,7 @@ export function createDesk({ programs, shared, text, q, dir }) {
         o.tint = rng() > 0.86 ? [shade, shade * 0.84, shade * 0.72] : [shade, shade, shade * 0.95];
         o.extra.iClear = 2;
       },
-      clearStack
+      { iClear: 1 }
     ),
     programs.solid({ house: 0, ambient: 0.13, defines: { INSTANCED: 1 }, deform: CLEAR_DEFORM })
   );
@@ -471,14 +466,16 @@ export function createDesk({ programs, shared, text, q, dir }) {
   group.add(bulb);
 
   /* What the lamp and the window do to the wall: authored as cards, not computed. */
-  const wash = new Mesh(new PlaneGeometry(2.6, 1.9), programs.glow({ color: [1, 0.66, 0.36], alpha: 0.13 }));
-  wash.position.set(ix(0.34), 0.42, -0.985);
+  const wash = new Mesh(
+    instances(new PlaneGeometry(1, 1), 2, (i, o) => {
+      o.pos = i === 0 ? [ix(0.34), 0.42, -0.985] : [ix(-0.46), 0.95, -0.98];
+      o.scale = i === 0 ? [2.6, 1.9, 1] : [3.2, 2.2, 1];
+      o.tint = i === 0 ? [0.13, 0.086, 0.047] : [0.028, 0.038, 0.067];
+    }),
+    programs.glow({ defines: { INSTANCED: 1 } })
+  );
   wash.frustumCulled = false;
   group.add(wash);
-  const windowWash = new Mesh(new PlaneGeometry(3.2, 2.2), programs.glow({ color: [0.4, 0.55, 0.95], alpha: 0.07 }));
-  windowWash.position.set(ix(-0.46), 0.95, -0.98);
-  windowWash.frustumCulled = false;
-  group.add(windowWash);
 
   const beamGeometry = new CylinderGeometry(0.05, 0.54, 0.86, 26, 1, true);
   const beamMesh = new Mesh(
@@ -523,7 +520,6 @@ export function createDesk({ programs, shared, text, q, dir }) {
   const scratch = new Vector3();
   let act4 = { x: 0, y: 0, z: 0 };
   let ringAmount = 0;
-  let clockHours = 3.2;
   const bias = new Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.4975, 0, 0, 0, 1);
 
   const sheetsFull = sheets.geometry.instanceCount;
@@ -531,7 +527,6 @@ export function createDesk({ programs, shared, text, q, dir }) {
   const dossiersFull = dossiers.geometry.instanceCount;
 
   const setClock = (hours) => {
-    clockHours = hours;
     hourHand.rotation.z = -((hours % 12) / 12) * Math.PI * 2;
     minuteHand.rotation.z = -(hours % 1) * Math.PI * 2;
   };
@@ -541,7 +536,7 @@ export function createDesk({ programs, shared, text, q, dir }) {
     group,
     u,
     handset,
-    cord,
+    material: staticMesh.material,
     setClock,
     lampPos: lampLocal,
     pool: poolDefault,
@@ -551,6 +546,13 @@ export function createDesk({ programs, shared, text, q, dir }) {
     },
     setActPositions(position) {
       act4 = position;
+    },
+    /** The new phone, in desk space, on the spot under the line. */
+    setPhone(phone) {
+      phone.position.set(0, 0.0043, -0.4);
+      phone.visible = false;
+      group.add(phone);
+      this.phone = phone;
     },
     setAct(act) {
       if (act === 4) {
@@ -574,19 +576,10 @@ export function createDesk({ programs, shared, text, q, dir }) {
     setShadowTaps(taps) {
       woodUniforms.uShadowTaps.value = taps;
     },
-    setRoom(visible) {
-      floors.visible = visible;
-    },
     setDensity(scale) {
       sheets.geometry.instanceCount = Math.floor(sheetsFull * scale);
       stacks.geometry.instanceCount = Math.floor(stacksFull * scale);
       dossiers.geometry.instanceCount = Math.floor(dossiersFull * scale);
-    },
-    setClearedCounts(fraction) {
-      const f = clamp01(fraction);
-      sheets.visible = f < 1;
-      stacks.visible = f < 1;
-      dossiers.visible = f < 1;
     },
     setExtras(enabled) {
       dust.visible = enabled;
@@ -594,7 +587,10 @@ export function createDesk({ programs, shared, text, q, dir }) {
     },
     /** One depth map, from one fixed bulb. Must be re-rendered after a context restore. */
     bakeShadow(renderer) {
-      const hidden = [top, floors, bulb, beamMesh, dust, sky, slats, room, wash, windowWash];
+      const hidden = [top, floors, bulb, beamMesh, dust, sky, slats, room, wash];
+      if (this.phone) {
+        hidden.push(this.phone);
+      }
       const before = hidden.map((object) => object.visible);
       const previousPosition = group.position.clone();
       const previousClear = u.uClear.value;
@@ -640,7 +636,6 @@ export function createDesk({ programs, shared, text, q, dir }) {
         mesh.visible = f < 1;
       };
       fly(landlineBase, 1, -1);
-      fly(cord, 1, -1);
       fly(printer, 2, 1);
       const paperGone = clear >= 3;
       sheets.visible = !paperGone;
@@ -673,6 +668,3 @@ export function createDesk({ programs, shared, text, q, dir }) {
 }
 
 const UP_AXIS = new Vector3(0, 1, 0);
-
-export { beam };
-export const deskSmoothstep = smoothstep;

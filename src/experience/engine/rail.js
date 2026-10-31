@@ -140,7 +140,7 @@ export function bakeKnots(layout, metas) {
 
   /* Floors. Page-locked shots: the subject plane moves with the page in a transit. */
   const list = metas.map((meta) => solved[meta.id]);
-  let y = WORLD.slabBottom - 12;
+  let y = WORLD.slabBottom - 30;
   const k = portrait ? 1.15 : 1.6;
   for (let i = 0; i < list.length; i += 1) {
     const s = list[i];

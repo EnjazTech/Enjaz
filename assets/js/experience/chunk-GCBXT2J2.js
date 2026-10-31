@@ -1,0 +1,2 @@
+/* three.js r187 (c) three.js authors, MIT. ENJAZ film. */
+import{l}from"./chunk-GBHZZ3DY.js";import{J as t,x as e}from"./chunk-ZD75F7KI.js";import"./chunk-AEJNSRIJ.js";var u={*build(o){let{programs:s}=o,a=new e(new t(.5,.5),s.glow({color:[.365,1,.87],alpha:0,shape:2}));a.rotation.x=-Math.PI/2,a.position.y=.002,o.group.add(a),o.flash=a,yield},layout(o){o.group.position.set(0,o.solved.deskAct4.y,0)},update(o,s){let a=s.flash.material.uniforms;a.uRadius.value=l(.1,.3,o.hold)*.9,a.uAlpha.value=(1-l(.14,.34,o.hold))*l(.1,.14,o.hold)*1.4}};export{u as default};

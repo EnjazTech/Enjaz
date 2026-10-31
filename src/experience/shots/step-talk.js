@@ -31,7 +31,7 @@ export default {
         },
       })
     );
-    const handset = new Mesh(handsetGeometry(), programs.solid({ ambient: 0.25 }));
+    const handset = new Mesh(handsetGeometry(), programs.solid({ ambient: 0.75 }));
     handset.scale.setScalar(2.4);
     handset.position.set(0, -1.18, 0);
     handset.rotation.z = 1.25;
