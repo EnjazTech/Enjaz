@@ -24,7 +24,8 @@ const ORIENTATIONS = [
 /* Where each still comes from: a shot, and how far through its hold. */
 const SCENES = [
   { name: "desk", shot: "hero", at: 0 },
-  { name: "archive", shot: "svc.web", at: 0.8 },
+  /* The atrium rather than a machine: this one sits behind the 404's copy, so no sign text. */
+  { name: "archive", shot: "svc.head", at: 0.9 },
   { name: "shaft", shot: "process.head", at: 0.6 },
   { name: "aerial", shot: "why.q", at: 0.5 },
   { name: "dawn", shot: "why.stats", at: 1 },

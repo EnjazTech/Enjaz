@@ -273,6 +273,40 @@ await check("D2", "every caption pins where the layout says", async () => {
   }
 });
 
+await check("D3", "on a phone, no second caption shares the screen during a hold", async () => {
+  for (const [locale, path] of PAGES) {
+    for (const [width, height] of [[360, 640], [390, 844], [412, 915]]) {
+      const { context, page } = await tall(path, { width, height, locale });
+      const bad = await page.evaluate((ids) => {
+        const out = [];
+        const nav = document.querySelector("[data-nav]").getBoundingClientRect().height;
+        const svh = window.innerHeight;
+        for (const id of ids) {
+          const track = document.querySelector(`[data-shot="${id}"]`);
+          const caption = track.querySelector(":scope > .shot");
+          const top = track.getBoundingClientRect().top + scrollY;
+          const pin = parseFloat(getComputedStyle(caption).insetBlockEnd);
+          const gap = parseFloat(getComputedStyle(track).paddingBlockEnd);
+          const captionH = caption.getBoundingClientRect().height;
+          const hold = track.getBoundingClientRect().height - gap - captionH;
+          window.scrollTo({ top: top + captionH + pin - svh + hold * 0.25, behavior: "instant" });
+          for (const other of document.querySelectorAll(".shot")) {
+            if (other !== caption && other.getBoundingClientRect().height > 0) {
+              const rect = other.getBoundingClientRect();
+              if (rect.bottom > nav + 4 && rect.top < svh - 4) {
+                out.push(`${id} with ${other.parentElement.dataset.shot}`);
+              }
+            }
+          }
+        }
+        return out;
+      }, CAPTIONS);
+      assert(bad.length === 0, `${path} ${width}x${height}: ${bad.join("; ")}`);
+      await context.close();
+    }
+  }
+});
+
 await check("D4", "anchors land inside the first hold", async () => {
   for (const [locale, path] of PAGES) {
     for (const [width, height] of [[390, 844], [1440, 900]]) {
@@ -329,6 +363,37 @@ await check("D6", "no layout shift through lamp-on", async () => {
   return `CLS ${cls.toFixed(4)}`;
 });
 
+await check("D7", "PageDown shows every piece of copy in full at some step", async () => {
+  for (const [locale, path] of PAGES) {
+    for (const [width, height] of [[360, 640], [390, 844], [1280, 720], [1440, 900]]) {
+      const { context, page } = await tall(path, { width, height, locale });
+      const missed = await page.evaluate(async () => {
+        document.documentElement.style.scrollBehavior = "auto";
+        const nav = document.querySelector("[data-nav]").getBoundingClientRect().height;
+        const elements = [...document.querySelectorAll("main h1, main h2, main h3, main p, main li p, main .checklist li")].filter((element) => element.getBoundingClientRect().height > 0 && !element.closest(".ticker"));
+        const seen = new Set();
+        const step = window.innerHeight * 0.875;
+        const max = document.documentElement.scrollHeight - window.innerHeight;
+        for (let y = 0; ; y = Math.min(max, y + step)) {
+          window.scrollTo({ top: y, behavior: "instant" });
+          for (const element of elements) {
+            const rect = element.getBoundingClientRect();
+            if (rect.top >= nav - 1 && rect.bottom <= window.innerHeight + 1) {
+              seen.add(element);
+            }
+          }
+          if (y >= max) {
+            break;
+          }
+        }
+        return elements.filter((element) => !seen.has(element)).map((element) => element.textContent.trim().slice(0, 30));
+      });
+      assert(missed.length === 0, `${path} ${width}x${height}: never fully visible: ${missed.join(" | ")}`);
+      await context.close();
+    }
+  }
+});
+
 await check("D8", "find-in-page reaches every heading", async () => {
   const { context, page } = await tall("/en/", { width: 1440, height: 900 });
   const bad = await page.evaluate(() => {
@@ -363,6 +428,27 @@ await check("D9", "tab order equals main's, plus the dock last", async () => {
     const dock = after.pop();
     assert(/wa\.me/.test(dock), `last focusable should be the dock, got ${dock}`);
     assert(JSON.stringify(before) === JSON.stringify(after), `${path}: order differs`);
+  }
+});
+
+await check("D10", "200% text stays on screen, with nothing overflowing", async () => {
+  for (const [locale, path] of PAGES) {
+    const { context, page } = await tall(path, { width: 1440, height: 900, locale });
+    const state = await page.evaluate(async () => {
+      document.documentElement.style.fontSize = "200%";
+      await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+      const clipped = [];
+      for (const element of document.querySelectorAll(".shot h1, .shot h2, .shot h3, .shot p")) {
+        const rect = element.getBoundingClientRect();
+        if (rect.height > 0 && (rect.left < -1 || rect.right > document.documentElement.clientWidth + 1)) {
+          clipped.push(element.textContent.trim().slice(0, 24));
+        }
+      }
+      return { scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth, clipped };
+    });
+    assert(state.scrollWidth <= state.clientWidth, `${path}: overflow ${state.scrollWidth} > ${state.clientWidth}`);
+    assert(state.clipped.length === 0, `${path}: off screen: ${state.clipped.join(" | ")}`);
+    await context.close();
   }
 });
 
@@ -509,6 +595,48 @@ await check("E3", "the same y gives the same frame, however you got there", asyn
   await context.close();
 });
 
+await check("E4", "no blank frames, apart from the two authored dark stretches", async () => {
+  for (const [locale, path] of PAGES) {
+    const { context, page } = await film(`${path}?tier=L`, { width: 390, height: 844, locale }, { all: true });
+    const blank = await page.evaluate(() => {
+      const world = window.__enjazWorld;
+      const gl = world.renderer.getContext();
+      const { shots } = world.layout;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      const out = [];
+      for (let i = 0; i <= 50; i += 1) {
+        const y = (max * i) / 50;
+        world.seek(y);
+        world.renderOnce();
+        const width = gl.drawingBufferWidth;
+        const height = gl.drawingBufferHeight;
+        const pixels = new Uint8Array(width * height * 4);
+        gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        let sum = 0;
+        let square = 0;
+        let count = 0;
+        for (let p = 0; p < pixels.length; p += 32) {
+          const value = (pixels[p] + pixels[p + 1] + pixels[p + 2]) / 3;
+          sum += value;
+          square += value * value;
+          count += 1;
+        }
+        const mean = sum / count;
+        const variance = square / count - mean * mean;
+        /* Inside the slab, and the fall: black on purpose. */
+        const inSlab = y > shots.drop.pinStart && y < shots["svc.head"].pinStart;
+        const inFall = y > shots.fall.pinStart && y < shots["why.q"].pinStart;
+        if (variance < 2 && !inSlab && !inFall) {
+          out.push(`y=${Math.round(y)} var=${variance.toFixed(2)}`);
+        }
+      }
+      return out;
+    });
+    assert(blank.length === 0, `${path}: ${blank.join(", ")}`);
+    await context.close();
+  }
+});
+
 await check("E5", "captions keep 4.5:1 contrast over the world", async () => {
   const worst = [];
   for (const [locale, path] of PAGES) {
@@ -565,6 +693,48 @@ await check("E5", "captions keep 4.5:1 contrast over the world", async () => {
     }
   }
   assert(worst.length === 0, worst.slice(0, 12).join("; "));
+});
+
+await check("E6", "subjects stay clear of their captions", async () => {
+  for (const [locale, path] of PAGES) {
+    for (const [width, height] of [[390, 844], [1440, 900]]) {
+      const { context, page } = await film(`${path}?tier=L`, { width, height, locale });
+      const bad = await page.evaluate((ids) => {
+        const world = window.__enjazWorld;
+        const { layout, solved } = world;
+        const out = [];
+        for (const id of ids) {
+          const s = solved[id];
+          const caption = layout.shots[id].caption;
+          /* The CTA is the exception: its panel sits on the phone's screen by design. */
+          if (!s.meta.subject || !caption || id === "cta") {
+            continue;
+          }
+          const px = (s.meta.subject.radius * (layout.H / 2)) / (s.d * Math.tan((s.fov * Math.PI) / 360));
+          const cx = layout.W / 2 - s.ox;
+          const cy = layout.H / 2 - s.oy;
+          let inside = 0;
+          const steps = 24;
+          for (let i = 0; i < steps; i += 1) {
+            for (let j = 0; j < steps; j += 1) {
+              const x = caption.x + (caption.w * (i + 0.5)) / steps;
+              const y = caption.y + (caption.h * (j + 0.5)) / steps;
+              if (Math.hypot(x - cx, y - cy) < px) {
+                inside += 1;
+              }
+            }
+          }
+          const fraction = inside / (steps * steps);
+          if (fraction > 0.05) {
+            out.push(`${id} ${(fraction * 100).toFixed(0)}%`);
+          }
+        }
+        return out;
+      }, CAPTIONS);
+      assert(bad.length === 0, `${path} ${width}: ${bad.join(", ")}`);
+      await context.close();
+    }
+  }
 });
 
 await check("E7", "context loss hides the canvas at once, and restore brings it back", async () => {
