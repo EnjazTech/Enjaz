@@ -1023,6 +1023,39 @@ await check("E18", "the Arabic film mirrors the English one", async () => {
   assert(Math.abs(mirrored - ar.x) < en.W * 0.08, `en ${en.x}, ar ${ar.x}`);
 });
 
+await check("E22", "the old phone's handset is always where the story puts it", async () => {
+  for (const [locale, path] of PAGES) {
+    const { context, page } = await film(`${path}?tier=L`, { width: 1440, height: 900, locale }, { all: true });
+    const state = await page.evaluate(() => {
+      const world = window.__enjazWorld;
+      const { shots } = world.layout;
+      const handset = world.scene.getObjectByName("handset");
+      world.freeze(1.5); /* Between ring bursts, so the hop does not move it. */
+      const at = (y) => {
+        world.seek(y);
+        return { x: handset.position.x, y: handset.position.y, z: handset.position.z, visible: handset.visible };
+      };
+      const drop = shots.drop;
+      return {
+        start: at(0),
+        leaving: at(shots.hero.pinEnd),
+        justAfter: at(shots.hero.pinEnd + 2),
+        fallen: at(drop.pinStart + (drop.pinEnd - drop.pinStart) * 0.3),
+        question: at((shots["why.q"].pinStart + shots["why.q"].pinEnd) / 2),
+        closing: at(shots.coda.pinStart),
+        back: at(0),
+      };
+    });
+    const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+    assert(distance(state.leaving, state.justAfter) < 0.02, `${path}: teleports by ${distance(state.leaving, state.justAfter).toFixed(2)} m as the hero ends`);
+    assert(state.fallen.y < -0.3, `${path}: not hanging below the desk in the drop, y=${state.fallen.y}`);
+    assert(distance(state.question, state.start) < 0.01, `${path}: not back on its cradle in the last act`);
+    assert(!state.closing.visible, `${path}: still on the desk in the closing shot`);
+    assert(distance(state.back, state.start) < 0.01, `${path}: did not come home when scrolling back`);
+    await context.close();
+  }
+});
+
 await check("E19", "the 404 page loads no scripts, one image, and shows its copy", async () => {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const requests = [];

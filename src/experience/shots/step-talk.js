@@ -6,7 +6,7 @@
 
 import { CylinderGeometry, Group, Mesh, PlaneGeometry } from "three";
 import { merge, part, smoothstep } from "../engine/geo.js";
-import { cordGeometry, handsetGeometry } from "../sets/props.js";
+import { cordGeometry, handsetGeometry, phoneShading } from "../sets/props.js";
 
 export default {
   *build(ctx) {
@@ -21,17 +21,10 @@ export default {
     const hanging = new Group();
     hanging.position.set(dir * 0.32, 1.0, 0.2);
     const cord = new Mesh(
-      cordGeometry([[0, 0.4, 0], [0, 0, 0], [0.02, -0.5, 0], [0, -1.05, 0]], 42, 0.03),
-      programs.solid({
-        ambient: 0.25,
-        deform: {
-          fpars: `uniform float uMint;`,
-          frag: `c = mix(c, vec3(0.365, 1.0, 0.87), uMint);`,
-          uniforms: { uMint: { value: 0 } },
-        },
-      })
+      cordGeometry([[0, 0.4, 0], [0, 0, 0], [0.02, -0.5, 0], [0, -1.05, 0]], 42, 0.03, 0.009),
+      programs.solid({ deform: phoneShading() })
     );
-    const handset = new Mesh(handsetGeometry(), programs.solid({ ambient: 0.75 }));
+    const handset = new Mesh(handsetGeometry(), programs.solid({ deform: phoneShading() }));
     handset.scale.setScalar(2.4);
     handset.position.set(0, -1.18, 0);
     handset.rotation.z = 1.25;

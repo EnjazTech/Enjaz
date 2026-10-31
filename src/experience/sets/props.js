@@ -31,7 +31,17 @@ export function beam(a, b, thickness, options) {
 const BEIGE = [0.78, 0.72, 0.6];
 const BEIGE_DARK = [0.56, 0.51, 0.42];
 const PLASTIC = [0.2, 0.19, 0.18];
-const RUST = [0.46, 0.14, 0.12];
+/* The old landline, in the brand's violet: it has to read against a dark frame. */
+const PHONE = [0.643, 0.545, 1];
+const PHONE_CORD = [0.52, 0.44, 0.84];
+
+/* Keeps the phone's exact hue in any light: the building's cool light and the lamp's
+   warm one would each pull violet off brand. uMint is the cord joining the line. */
+export const phoneShading = () => ({
+  fpars: `uniform float uMint;`,
+  frag: `c = mix(vTint * (0.42 + 0.78 * m.g), vec3(0.365, 1.0, 0.87), uMint);`,
+  uniforms: { uMint: { value: 0 } },
+});
 
 /** Dot-matrix printer: the wedge body, the platen and its knob, the paper slot. */
 export function printerParts(at, dir) {
@@ -94,25 +104,25 @@ export function lampParts(baseAt, elbow, head, dir) {
 export function landlineBaseParts(at) {
   const [x, y, z] = at;
   return [
-    box(0.22, 0.05, 0.24, { at: [x, y + 0.025, z], color: RUST }),
-    box(0.18, 0.04, 0.16, { at: [x, y + 0.07, z + 0.015], rot: [0.32, 0, 0], color: RUST }),
+    box(0.22, 0.05, 0.24, { at: [x, y + 0.025, z], color: PHONE }),
+    box(0.18, 0.04, 0.16, { at: [x, y + 0.07, z + 0.015], rot: [0.32, 0, 0], color: PHONE }),
     cylinder(0.05, 0.05, 0.006, 24, { at: [x, y + 0.097, z + 0.03], rot: [0.32, 0, 0], color: [0.86, 0.82, 0.72] }),
     /* Cradle prongs. */
-    box(0.03, 0.05, 0.05, { at: [x - 0.075, y + 0.1, z - 0.08], color: RUST }),
-    box(0.03, 0.05, 0.05, { at: [x + 0.075, y + 0.1, z - 0.08], color: RUST }),
+    box(0.03, 0.05, 0.05, { at: [x - 0.075, y + 0.1, z - 0.08], color: PHONE }),
+    box(0.03, 0.05, 0.05, { at: [x + 0.075, y + 0.1, z - 0.08], color: PHONE }),
   ];
 }
 
 export function handsetGeometry() {
   return merge([
-    box(0.24, 0.024, 0.04, { at: [0, 0, 0], color: RUST }),
-    cylinder(0.033, 0.03, 0.03, 16, { at: [-0.11, -0.022, 0], color: RUST }),
-    cylinder(0.033, 0.03, 0.03, 16, { at: [0.11, -0.022, 0], color: RUST }),
+    box(0.24, 0.024, 0.04, { at: [0, 0, 0], color: PHONE }),
+    cylinder(0.033, 0.03, 0.03, 16, { at: [-0.11, -0.022, 0], color: PHONE }),
+    cylinder(0.033, 0.03, 0.03, 16, { at: [0.11, -0.022, 0], color: PHONE }),
   ]);
 }
 
 /** A curly phone cord: a tight helix around a spline. */
-export function cordGeometry(points, loops = 26, radius = 0.009) {
+export function cordGeometry(points, loops = 26, radius = 0.009, thickness = 0.0034) {
   const spline = new CatmullRomCurve3(points.map((point) => new Vector3(...point)));
   const pts = [];
   const samples = loops * 8;
@@ -128,7 +138,7 @@ export function cordGeometry(points, loops = 26, radius = 0.009) {
     const angle = t * loops * Math.PI * 2;
     pts.push(center.addScaledVector(side, Math.cos(angle) * radius).addScaledVector(up, Math.sin(angle) * radius));
   }
-  return part(new TubeGeometry(new CatmullRomCurve3(pts), samples, 0.0034, 4, false), { color: [0.34, 0.1, 0.09] });
+  return part(new TubeGeometry(new CatmullRomCurve3(pts), samples, thickness, 4, false), { color: PHONE_CORD });
 }
 
 /** Mug: a lathe, a handle and a dark surface of cold coffee. */

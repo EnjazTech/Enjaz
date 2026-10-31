@@ -416,9 +416,13 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed 
 
     const hero = layout.shots.hero;
     if (y < deskFlipY) {
-      desk.setRing(1 - progress(hero.pinEnd, hero.pinEnd + (layout.shots.drop.pinEnd - hero.pinEnd) * 0.14));
+      const dropLength = layout.shots.drop.pinEnd - hero.pinEnd;
+      desk.setRing(1 - progress(hero.pinEnd, hero.pinEnd + dropLength * 0.14));
+      desk.setOffHook(eased(progress(hero.pinEnd, hero.pinEnd + dropLength * 0.22)));
     } else {
+      /* The same desk, the same mess: back on its cradle, ringing. */
       desk.setRing(1 - progress(list.pinStart, list.pinStart + (list.pinEnd - list.pinStart) * 0.5));
+      desk.setOffHook(0);
     }
 
     /* The phone falls down its line, lands, and later turns under the CTA panel. */

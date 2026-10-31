@@ -19,7 +19,7 @@ import {
   Vector3,
   WebGLRenderTarget,
 } from "three";
-import { box, clamp01, instances, merge, part, quatEuler, seeded } from "../engine/geo.js";
+import { box, clamp01, instances, merge, part, quatEuler, seeded, smoothstep } from "../engine/geo.js";
 import { WORLD } from "../engine/rail.js";
 import { canvasTexture } from "../programs.js";
 import {
@@ -29,6 +29,7 @@ import {
   landlineBaseParts,
   lampParts,
   mugParts,
+  phoneShading,
   printerParts,
 } from "./props.js";
 
@@ -210,13 +211,19 @@ export function createDesk({ programs, shared, text, q, dir }) {
     ],
     24
   );
-  const landlineBase = new Mesh(merge([...landlineBaseParts(landlineAt), cordParts]), staticMesh.material);
+  const phoneMaterial = programs.solid({ house: 0, deform: phoneShading() });
+  const landlineBase = new Mesh(merge([...landlineBaseParts(landlineAt), cordParts]), phoneMaterial);
   group.add(printer, landlineBase);
 
-  /* The handset rings on its cradle; the shot shakes it off the hook. */
-  const handset = new Mesh(handsetGeometry(), staticMesh.material);
-  handset.position.set(landlineAt[0], 0.135, landlineAt[2] - 0.08);
+  /* The handset rings on its cradle, and shakes itself off the hook as you leave. */
+  const cradle = { x: landlineAt[0], y: 0.135, z: landlineAt[2] - 0.08 };
+  const handset = new Mesh(handsetGeometry(), phoneMaterial);
+  handset.name = "handset";
+  handset.position.set(cradle.x, cradle.y, cradle.z);
   group.add(handset);
+  const hangingCord = new Mesh(cordGeometry([[0, 0, 0], [0, -0.2, 0], [0, -0.4, 0.01], [0, -0.6, 0]], 22, 0.008), phoneMaterial);
+  hangingCord.visible = false;
+  group.add(hangingCord);
 
   /* Clock hands: 03:12 at night, 07:00 at dawn. */
   const handMaterial = staticMesh.material;
@@ -520,6 +527,7 @@ export function createDesk({ programs, shared, text, q, dir }) {
   const scratch = new Vector3();
   let act4 = { x: 0, y: 0, z: 0 };
   let ringAmount = 0;
+  let offHook = 0;
   const bias = new Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.4975, 0, 0, 0, 1);
 
   const sheetsFull = sheets.geometry.instanceCount;
@@ -535,12 +543,9 @@ export function createDesk({ programs, shared, text, q, dir }) {
   return {
     group,
     u,
-    handset,
-    material: staticMesh.material,
     setClock,
     lampPos: lampLocal,
     pool: poolDefault,
-    landline: { x: landlineAt[0], z: landlineAt[2] - 0.08 },
     *build() {
       yield;
     },
@@ -573,6 +578,10 @@ export function createDesk({ programs, shared, text, q, dir }) {
     setRing(amount) {
       ringAmount = amount;
     },
+    /** 0 is on the cradle. 1 has it hanging below the desk on its cord. */
+    setOffHook(amount) {
+      offHook = amount;
+    },
     setShadowTaps(taps) {
       woodUniforms.uShadowTaps.value = taps;
     },
@@ -587,7 +596,7 @@ export function createDesk({ programs, shared, text, q, dir }) {
     },
     /** One depth map, from one fixed bulb. Must be re-rendered after a context restore. */
     bakeShadow(renderer) {
-      const hidden = [top, floors, bulb, beamMesh, dust, sky, slats, room, wash];
+      const hidden = [top, floors, bulb, beamMesh, dust, sky, slats, room, wash, hangingCord];
       if (this.phone) {
         hidden.push(this.phone);
       }
@@ -600,8 +609,12 @@ export function createDesk({ programs, shared, text, q, dir }) {
         object.visible = false;
       });
       group.position.set(0, 0, 0);
+      /* Everything home, or a re-bake after a context restore would lose its shadows. */
+      this.setClear(0);
+      handset.position.set(cradle.x, cradle.y, cradle.z);
+      handset.rotation.set(0, 0, 0);
+      handset.visible = true;
       group.updateMatrixWorld(true);
-      u.uClear.value = 0;
       shared.uLampOrigin.value.set(0, 0, 0);
       lampCamera.position.copy(lampLocal);
       lampCamera.up.copy(up);
@@ -621,8 +634,8 @@ export function createDesk({ programs, shared, text, q, dir }) {
       });
       group.position.copy(previousPosition);
       group.visible = wasVisible;
+      this.setClear(previousClear);
       group.updateMatrixWorld(true);
-      u.uClear.value = previousClear;
     },
     /** The checklist's rings: printer on the last line, landline on the second. */
     setClear(clear) {
@@ -648,10 +661,20 @@ export function createDesk({ programs, shared, text, q, dir }) {
       const cycle = time % 3;
       const burst = (cycle < 0.42 || (cycle > 0.62 && cycle < 1.04)) ? 1 : 0;
       const hop = Math.abs(Math.sin(time * 37.7)) * 0.006 * burst * ringAmount;
-      if (ringAmount > 0) {
-        handset.position.y = 0.135 + hop;
-        handset.rotation.z = Math.sin(time * 75) * 0.012 * burst * ringAmount;
-      }
+      const wobble = Math.sin(time * 75) * 0.012 * burst * ringAmount;
+
+      /* Off the cradle, over the front edge and down on its cord. It leaves the
+         desk with the landline when the checklist clears it. */
+      const slide = smoothstep(0, 0.5, offHook);
+      const fall = smoothstep(0.42, 1, offHook);
+      const x = cradle.x + (-0.3 * dir - cradle.x) * slide;
+      const z = cradle.z + (0.1 - cradle.z) * slide;
+      handset.position.set(x + landlineBase.position.x, cradle.y + hop - fall * 0.62 + landlineBase.position.y, z + landlineBase.position.z);
+      handset.rotation.set(fall * 1.3, 0, slide * 0.9 * dir + wobble + landlineBase.rotation.z);
+      handset.visible = landlineBase.visible;
+      hangingCord.visible = fall > 0.02;
+      hangingCord.position.set(x, 0, z - 0.02);
+      hangingCord.scale.y = Math.max(0.01, fall);
 
       const targetX = spot[0] + (p.pointer === 1 ? p.px * 0.2 : 0);
       const targetZ = spot[1] + (p.pointer === 1 ? p.py * 0.12 : 0);
