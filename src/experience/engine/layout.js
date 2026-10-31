@@ -29,6 +29,7 @@ export function bakeLayout() {
   const navH = nav ? nav.getBoundingClientRect().height : 0;
   const dir = document.documentElement.dir === "rtl" ? -1 : 1;
   const docH = document.documentElement.scrollHeight;
+  const pace = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--pace")) || 1;
   const shots = {};
 
   for (const track of document.querySelectorAll("[data-shot]")) {
@@ -64,7 +65,7 @@ export function bakeLayout() {
     shots[id] = shot;
   }
 
-  return { W, H, svh, lvh, navH, docH, dir, portrait: H >= W, shots };
+  return { W, H, svh, lvh, navH, docH, dir, pace, portrait: H >= W, shots };
 }
 
 /** Sets up rebaking. On touch, height-only changes are the URL bar: ignore them. */

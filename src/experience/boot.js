@@ -9,7 +9,7 @@ import { classify, isMobileDevice, FORCED_TIER } from "./engine/tiers.js";
 
 const WATCHDOG_MS = 20000;
 
-export async function boot({ onFail, onOff }) {
+export async function boot({ onFail, onOff, onOn }) {
   const forced = FORCED_TIER.exec(window.location.search)?.[1] ?? null;
   const canvas = document.createElement("canvas");
   canvas.className = "world";
@@ -59,6 +59,7 @@ export async function boot({ onFail, onOff }) {
       forced: Boolean(forced),
       onFail: fail,
       onOff,
+      onOn,
       isFailed: () => failed,
     });
     window.clearTimeout(watchdog);

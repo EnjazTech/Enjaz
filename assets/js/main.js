@@ -225,6 +225,12 @@ function initDock() {
   const navHeight = nav ? Math.ceil(nav.getBoundingClientRect().height) : 0;
 
   const onScreen = new Set();
+  /* The film fades captions in and out: a button nobody can see does not count either. */
+  const update = () => {
+    dock.classList.toggle("is-hidden", [...onScreen].some((element) => !element.closest(".is-gone")));
+  };
+  document.addEventListener("enjaz:captions", update);
+
   const observer = new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
@@ -234,7 +240,7 @@ function initDock() {
           onScreen.delete(entry.target);
         }
       });
-      dock.classList.toggle("is-hidden", onScreen.size > 0);
+      update();
     },
     { threshold: 0.9, rootMargin: `-${navHeight}px 0px 0px 0px` }
   );
@@ -313,13 +319,9 @@ function initStills() {
    The film, and how it steps aside
    -------------------------------------------------------------------------- */
 
-/* Before lamp-on: tall tracks with no film are a slog, so go compact. The
- * visitor stays at the same caption, however far the layout moved under them. */
-function collapseToStills() {
-  if (!ROOT.classList.contains("w3d")) {
-    return;
-  }
-
+/* Runs a change that moves the layout, keeping the visitor at the same caption,
+ * however far it moved under them. */
+function keepPlace(change) {
   const middle = window.innerHeight / 2;
   let nearest = null;
   let nearestDistance = Infinity;
@@ -334,9 +336,7 @@ function collapseToStills() {
   });
 
   const before = nearest ? nearest.getBoundingClientRect().top : 0;
-  ROOT.classList.remove("w3d", "world-on", "world-off");
-  ROOT.removeAttribute("data-still");
-  ROOT.classList.add("stills");
+  change();
 
   if (nearest && window.scrollY >= 4) {
     window.scrollBy({
@@ -344,14 +344,33 @@ function collapseToStills() {
       behavior: "instant",
     });
   }
+}
+
+/* Before lamp-on: tall tracks with no film are a slog, so go compact. */
+function collapseToStills() {
+  if (!ROOT.classList.contains("w3d")) {
+    return;
+  }
+
+  keepPlace(() => {
+    ROOT.classList.remove("w3d", "world-on", "world-off");
+    ROOT.removeAttribute("data-still");
+    ROOT.classList.add("stills");
+  });
 
   initStills();
   initReveal();
 }
 
-/* After lamp-on the visitor is mid-read: keep the layout, swap in a still. */
+/* After lamp-on the visitor is mid-read: keep the tall layout and swap in a still,
+ * but give the page its normal length back, because the runway is for the film. */
 function worldOff() {
-  ROOT.classList.add("world-off");
+  keepPlace(() => ROOT.classList.add("world-off"));
+}
+
+/* A restored context brings the film and its runway back. */
+function worldOn() {
+  keepPlace(() => ROOT.classList.remove("world-off"));
 }
 
 function initExperience() {
@@ -364,7 +383,7 @@ function initExperience() {
   const load = async () => {
     try {
       const { boot } = await import("/assets/js/experience/boot.js");
-      world = await boot({ onFail: collapseToStills, onOff: worldOff });
+      world = await boot({ onFail: collapseToStills, onOff: worldOff, onOn: worldOn });
     } catch (error) {
       collapseToStills();
     }

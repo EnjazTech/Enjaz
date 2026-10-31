@@ -26,8 +26,8 @@ export const WORLD = {
 const clamp01 = (value) => Math.min(1, Math.max(0, value));
 const lerp = (a, b, t) => a + (b - a) * t;
 
-/** Trapezoid velocity: 18% ramps, then constant speed through the middle 64%. */
-export function trapezoid(u, ramp = 0.18) {
+/** Trapezoid velocity: 34% ramps, so the camera leaves a hold and reaches the next one gently. */
+export function trapezoid(u, ramp = 0.34) {
   const peak = 1 / (1 - ramp);
   if (u < ramp) {
     return (peak * u * u) / (2 * ramp);
@@ -153,7 +153,8 @@ export function bakeKnots(layout, metas) {
     }
     const prev = list[i - 1];
     if (s.meta.floor === "locked") {
-      const transit = (prev.shot.gap ?? 0) + (s.shot.caption?.h ?? 0);
+      /* Taken out of --pace, because pace stretches the scroll and not the world. */
+      const transit = (prev.shot.gap ?? 0) / (layout.pace ?? 1) + (s.shot.caption?.h ?? 0);
       const sep = k * transit * 2 * prev.d * Math.tan((prev.fov * DEG) / 2) / H;
       y -= Math.max(3.6, sep);
     } else {

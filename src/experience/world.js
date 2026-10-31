@@ -22,8 +22,10 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
+import { createCaptions } from "./engine/captions.js";
 import { Governor } from "./engine/governor.js";
 import { seeded } from "./engine/geo.js";
+import { createFollower, createWheelPage, DIP_LAG } from "./engine/glide.js";
 import { bakeLayout, watchLayout } from "./engine/layout.js";
 import { bakeKnots, bakeTable, sampleTable, WORLD } from "./engine/rail.js";
 import { createText, waitForFonts } from "./engine/text.js";
@@ -37,6 +39,8 @@ import { createStrip } from "./sets/strip.js";
 
 const CLEAR = 0x07080c;
 const IDLE_STOP_MS = 12000;
+const DIP_MS = 190; // Long enough for the overlay in main.css to reach black.
+const DIP_REST_MS = 900;
 
 const nextTask = () =>
   new Promise((done) => {
@@ -60,7 +64,7 @@ async function runSliced(generator) {
   }
 }
 
-export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed }) {
+export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isFailed }) {
   ColorManagement.enabled = false;
   const q = { ...QUALITY[tier], instanceScale: 1 };
   const root = document.documentElement;
@@ -146,9 +150,12 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed 
   let archiveOnY = 0;
   let archiveOffY = 0;
   const pad = () => layout.svh * 0.15;
+  const captions = createCaptions({ inPlace: !coarse, blur: !coarse && tier !== "L" });
 
   function bake() {
+    captions.release();
     layout = bakeLayout();
+    captions.bake(layout);
     const baked = bakeKnots(layout, METAS);
     solved = baked.solved;
     docH = layout.docH;
@@ -348,8 +355,11 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed 
   const axisX = new Vector3(1, 0, 0);
   const p = { t: 0, enter: 0, hold: 0, exit: 0, y: 0, v: 0, time: 0, dt: 0, px: 0, py: 0, pointer: 0 };
 
-  let y = window.scrollY;
-  let velocity = 0;
+  const follower = createFollower(window.scrollY);
+  const wheelPage = createWheelPage();
+  let y = follower.y;
+  let dipStart = 0;
+  let dipReady = 0;
   let stopped = false;
   let frozenTime = null;
   let needsFrame = true;
@@ -365,31 +375,14 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed 
   let cadence = 0;
   let contextLost = false;
 
-  const smoothTime = coarse ? 0.09 : 0.14;
-
-  function follow(target, dt) {
-    /* Second-order smooth damp. Allocation-free, and it never overshoots much. */
-    const omega = 2 / smoothTime;
-    const x = omega * dt;
-    const decay = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
-    const change = y - target;
-    const temp = (velocity + omega * change) * dt;
-    velocity = (velocity - omega * temp) * decay;
-    y = target + (change + temp) * decay;
-    if (Math.abs(y - target) < 0.25 && Math.abs(velocity) < 2) {
-      y = target;
-      velocity = 0;
-    }
-  }
-
   function fillP(runtime, dt) {
     const clamp = (value) => Math.min(1, Math.max(0, value));
     p.t = runtime.b > runtime.a ? clamp((y - runtime.a) / (runtime.b - runtime.a)) : 1;
     p.enter = runtime.s > runtime.a ? clamp((y - runtime.a) / (runtime.s - runtime.a)) : y >= runtime.s ? 1 : 0;
     p.hold = runtime.e > runtime.s ? clamp((y - runtime.s) / (runtime.e - runtime.s)) : y >= runtime.e ? 1 : 0;
     p.exit = runtime.b > runtime.e ? clamp((y - runtime.e) / (runtime.b - runtime.e)) : y >= runtime.b ? 1 : 0;
-    p.y = y;
-    p.v = velocity;
+    p.y = y / layout.pace;
+    p.v = follower.v;
     p.time = time;
     p.dt = dt;
     p.px = smoothX;
@@ -482,7 +475,7 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed 
     shared.uLampOrigin.value.copy(desk.group.position);
     shared.uLampColor.value.set(1, 0.7, 0.42);
 
-    strip.u.uFeed.value = y * 0.00018;
+    strip.u.uFeed.value = (y * 0.00018) / layout.pace;
     fillP(runtimes[0], dt);
     if (deskVisible) {
       desk.resetSpot();
@@ -561,9 +554,26 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed 
     const dt = Math.min(rawDt, 100) / 1000;
     time += dt;
 
-    const target = window.scrollY;
-    const scrolling = Math.abs(target - y) > 0.25 || Math.abs(velocity) > 2;
-    follow(target, dt);
+    const native = window.scrollY;
+    const target = wheelPage.step(native, dt, layout.svh);
+    if (target !== native) {
+      window.scrollTo({ top: target, behavior: "instant" });
+    }
+    captions.update(target, dt);
+
+    /* Too far behind to glide there: go through the dark and land just short. */
+    if (!dipStart && Math.abs(target - y) > DIP_LAG * layout.svh && now > dipReady) {
+      dipStart = now;
+      root.classList.add("world-dip");
+    } else if (dipStart && now - dipStart >= DIP_MS) {
+      follower.land(target, layout.svh);
+      dipStart = 0;
+      dipReady = now + DIP_REST_MS;
+      root.classList.remove("world-dip");
+    }
+
+    const scrolling = Math.abs(target - follower.y) > 0.25 || Math.abs(follower.v) > 2;
+    y = follower.step(target, dt, layout.svh);
 
     smoothX += (pointerX - smoothX) * Math.min(1, dt * 6);
     smoothY += (pointerY - smoothY) * Math.min(1, dt * 6);
@@ -601,8 +611,17 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed 
     }
   }
 
+  /* Whatever was under way, the page is the browser's again. */
+  function letGo() {
+    wheelPage.on = false;
+    dipStart = 0;
+    root.classList.remove("world-dip");
+  }
+
   function stop() {
     stopped = true;
+    letGo();
+    captions.release();
   }
 
   /* --------------------------------------------------------------------------
@@ -645,7 +664,8 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed 
   );
 
   window.addEventListener("pageshow", () => {
-    y = window.scrollY;
+    follower.reset(window.scrollY);
+    y = follower.y;
     needsFrame = true;
   });
 
@@ -657,6 +677,7 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed 
   canvas.addEventListener("webglcontextlost", (event) => {
     event.preventDefault();
     contextLost = true;
+    letGo();
     losses += 1;
     onOff("context-lost");
   });
@@ -667,8 +688,12 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed 
     contextLost = false;
     /* three re-uploads everything, but the baked lamp depth is simply gone. */
     desk.bakeShadow(renderer);
+    /* The page gets its long runway back, so everything measured against it is stale. */
+    onOn();
+    bake();
+    follower.reset(window.scrollY);
+    y = follower.y;
     needsFrame = true;
-    root.classList.remove("world-off");
   });
 
   /* --------------------------------------------------------------------------
@@ -676,7 +701,8 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed 
      -------------------------------------------------------------------------- */
 
   bake();
-  y = window.scrollY;
+  follower.reset(window.scrollY);
+  y = follower.y;
 
   await runSliced(desk.build());
   await runSliced(archive.build());
@@ -725,10 +751,36 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed 
     film.resize(layout.W * renderer.getPixelRatio(), layout.H * renderer.getPixelRatio());
   }
 
+  /* The browser may have restored a scroll position during all that: no fly-in. */
+  follower.reset(window.scrollY);
+  y = follower.y;
+  captions.update(y, 0);
   draw(0.016);
   root.classList.add("world-on");
   window.requestAnimationFrame(tick);
   pumpQueue();
+
+  /* From here the wheel eases the page, so copy and camera move together. Pinch zoom,
+     sideways scrolling and an open nav drawer stay the browser's. */
+  window.addEventListener(
+    "wheel",
+    (event) => {
+      if (
+        event.ctrlKey ||
+        stopped ||
+        contextLost ||
+        frozenTime !== null ||
+        document.body.classList.contains("is-nav-open") ||
+        Math.abs(event.deltaX) > Math.abs(event.deltaY)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      wheelPage.input(event.deltaY, event.deltaMode, window.scrollY, layout.svh, layout.docH - layout.svh);
+      lastInput = performance.now();
+    },
+    { passive: false }
+  );
 
   const unwatch = watchLayout(() => {
     bake();
@@ -754,11 +806,17 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, isFailed 
     get solved() {
       return solved;
     },
+    /** Where the film is now, which may be behind the page. */
+    get y() {
+      return y;
+    },
     /** Jump straight to y, with no easing, and draw. */
     seek(target) {
       window.scrollTo({ top: target, behavior: "instant" });
-      y = window.scrollY;
-      velocity = 0;
+      letGo();
+      follower.reset(window.scrollY);
+      y = follower.y;
+      captions.update(y, 0);
       draw(0.016);
       return y;
     },

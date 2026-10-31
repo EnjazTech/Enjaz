@@ -1,6 +1,6 @@
 # The Paper Trail: final implementation contract
 
-Branch: `feature/3d-experience`. Do not merge to `main`, because `deploy.yml` publishes on every push to `main`. No visible copy changes. Where this document conflicts with a concept, this document wins.
+Built on `feature/3d-experience` and merged to `main` on 2026-10-31. `deploy.yml` publishes on every push to `main`, so test before pushing there. No visible copy changes. Where this document conflicts with a concept, this document wins.
 
 This is the design contract the film was built from. Where the code and this document disagree, the code and the "As built" list below are right. Statements marked **measured** were run in Playwright Chromium build 1148 against a scratch copy of the site (Section 14). Frame rates and GPU numbers on real phones are **targets, not measurements**, and remain unmeasured.
 
@@ -32,6 +32,12 @@ Where the build departed from the contract below, and why.
 - **Everything that wraps around the camera wraps by instance position**, never per vertex, or an object straddling the boundary tears into a band as tall as the period.
 - **Watchdog** collapses to stills after 20 s rather than holding the tall layout, following the collapse rule in Section 8.
 - **Story state** (turnover, clear, dawn, clock, ring, the last act's phone) lives in `world.js`, not in shots, because an anchor jump skips shots.
+- **The transition was rebuilt after [oryzo.ai](https://oryzo.ai/) (Lusion), on request,** because a hard flick played several scenes in half a second. Read from its bundle and measured in Chromium at 1440x900: the page is 63 screens long, each section 4 to 13 of them; wheel events are clamped to 200 px and eased with `1 - exp(-12 dt)`; copy is fixed in place and scrubbed through fade, blur and a short slide. Its flick and nav-jump were not recorded in motion, because the site began refusing connections part way through, and its phone layout was not measured. This overrides "never transformed", "no wheel listeners", the 18% ramps, the page-lock in Section 3.5 and the page length below:
+  - **Pace.** `--pace` in `main.css` (3, and 2.4 on coarse pointers) stretches every track, and `rail.js` divides it back out of `floorSep`, so the world is the same size and the camera takes longer over it. 51.8 screens at 1440x900 and 46.1 on a touch phone. Transits ramp over 34% each end, because nothing moves with the page any more. Shots that spin with `p.y` are divided by pace too, or machines would spin three times as far.
+  - **The wheel only.** `engine/glide.js` takes over the wheel and eases the page with Oryzo's constants, plus two things it does not have: the page never exceeds 3.5 screens a second, and at most 1.6 screens of input can queue, so it stops soon after you do. Measured on Iris Xe: a flick that reached 11.8 screens a second on Oryzo stays at 3.5 here, at 60 fps. Touch stays native, because a phone's own momentum is not worth replacing, and the film follows at up to 4.2 screens a second with a 0.2 s ease. Keys, the scrollbar, anchors and find-in-page stay the browser's, and take the page back mid-glide. Pinch zoom, sideways scrolling and an open drawer are never touched. The reasons for rejecting lenis in Section 9 still hold for a library and for touch.
+  - **Captions swap in place.** `engine/captions.js` fades, unblurs and slides each caption's children in reading order over 0.35 screens of scroll, cancelling 85% of its travel so it stays near its pin. On touch it does not cancel travel, because a main-thread transform would fight the compositor's scroll, and it skips the blur, as it does on Tier L. No per-letter stagger as on Oryzo, because Arabic letters join. Stopping mid-swap finishes the caption, and that is what keeps find-in-page and PageDown readable, because both land in these stretches. A caption over 70% of the screen tall stays plain scrolling copy. CSS hands everything back on focus, in print, under `world-off` and without `w3d`, and a faded button no longer hides the WhatsApp dock.
+  - **Long jumps dip.** More than 6 screens behind the page, the film goes through the dark for 190 ms and lands 0.8 screens short, moving, rather than whipping past every scene. Anchors under `w3d` are instant for the same reason.
+  - **`world-off` sets `--pace` to 1,** with `keepPlace` in `main.js` holding the visitor at the same caption, because a long runway with no film is a slog. A restored context brings it back.
 
 
 ## 0. Decisions at a glance
@@ -39,8 +45,8 @@ Where the build departed from the contract below, and why.
 | Question | Decision |
 |---|---|
 | Concept | One sheet of fanfold paper, never cut, followed in one continuous shot from a messy desk at 03:12 to the same desk at dawn |
-| Compositing | Opaque WebGL canvas, `position:fixed`, under the DOM. DOM text is never drawn in GL and never transformed |
-| Pinning | CSS `position:sticky` only. No JS writes a position. No wheel listeners, no scroll-snap |
+| Compositing | Opaque WebGL canvas, `position:fixed`, under the DOM. DOM text is never drawn in GL. Captions are scrubbed through a fade (see As built) |
+| Pinning | CSS `position:sticky`, with JS only easing the wheel and holding a caption in place during its fade (see As built). No scroll-snap |
 | Layout gate | `html.w3d` or `html.stills`, set synchronously in `locale.js` before first paint. No class means today's page |
 | three | Yes, `0.187.0` exact, tree-shaken, unused GLSL stubbed |
 | esbuild | Yes, 0.28, dev only, output committed |
@@ -49,7 +55,7 @@ Where the build departed from the contract below, and why.
 | Other dev-only tools | `harfbuzzjs`, `wawoff2`, `playwright`. None ship |
 | Bytes | About 175 KB gzip -6 in total (three 116, own code about 59). CI hard gate 200 KB |
 | Tier L budget | 0.55 MP, at most 28 draws, at most 70k triangles, 60 fps target |
-| Page length | 19.6 screens at 390x844 and 17.8 at 1440x900 (today 5.9 and 3.9) |
+| Page length | 46.1 screens on a touch phone at 412x839, 57.1 at 390x844 with a fine pointer, 51.8 at 1440x900 (plain page 5.9 and 3.9) |
 
 ## 1. Narrative and visual language
 
@@ -411,7 +417,7 @@ Worked: 5.8 m at 390x844, 3.8 m at 1440x900. Floor Y values are solved at bake, 
 ### 3.6 Follower and sync
 
 - Read `scrollY` once per rendered frame, first thing, before any DOM write.
-- Second-order SmoothDamp, allocation-free, smooth time 0.14 s on fine pointers and 0.09 s on touch. Snap under 0.25 px.
+- Second-order SmoothDamp, allocation-free, smooth time 0.2 s with a speed limit (see As built). Snap under 0.25 px.
 - Compositor scrolling can run a frame or two ahead of WebGL on Android, so nothing depends on pixel contact while moving: pinned text is stationary, and moving text never touches a 3D edge, so the gap reads as parallax. Exact DOM-to-3D registration exists at one place only, the landscape CTA hold, where the DOM is pinned and handheld noise is off.
 
 ### 3.7 Loop and render-on-demand
@@ -946,7 +952,7 @@ Viewports unless stated: 360x640, 390x844, 412x915, 768x1024, 1280x720, 1440x900
 | D2 | Each caption at mid-hold, bottom edge at `svh - pin` | Within 2 px |
 | D3 | At 25% of each hold on portrait up to 480 px wide | No other caption below the nav |
 | D4 | `#services`, `#process`, `#why` landing | Inside the hold, tolerance -60 px |
-| D5 | Page length | At most 20.5 screens in portrait, at most 18.5 in landscape |
+| D5 | Page length | At most 60 screens in portrait, at most 56 in landscape |
 | D6 | `layout-shift` total through lamp-on | At most 0.01, including a software-GL collapse at the top of the page |
 | D7 | PageDown 87.5% steps | Every text line fully visible in at least one step |
 | D8 | `window.find` on each h3 | Selection inside the viewport |
@@ -975,6 +981,13 @@ Viewports unless stated: 360x640, 390x844, 412x915, 768x1024, 1280x720, 1440x900
 | E19 | 404 | No script requests, one image, copy visible |
 | E20 | `emulateMedia({media:'print'})` | Height near the fixture, canvas and dock hidden |
 | E21 | Stills | 20 files, sizes within limits |
+| E22 | The old phone's handset | Where the story puts it, including on the way back |
+| E23 | A hard wheel flick | Page and film stay under cruise and within 1.5 screens of each other, then arrive together. Pinch zoom, sideways scrolling and an open drawer are left to the browser |
+| E24 | Long jumps, both ways | Dip through the dark, at most one frame over cruise, land on readable copy inside the hold |
+| E25 | Caption swap | Stays near its pin, blurs on M and H, finishes if you stop, gone in the gap, back on focus, in print and under `world-off` |
+| E26 | Find-in-page and real PageDown | Every heading and every piece of copy is readable where they land |
+| E27 | Touch phone | A real swipe scrolls natively with the film easing behind, no transform on captions, a WhatsApp link reachable throughout |
+| E28 | The film stopping mid-visit | Normal page length at the same caption, the wheel handed back, and the runway returns on restore |
 
 ## 14. Evidence log
 

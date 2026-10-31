@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { lampOn, launch, mainFixture, REPO, RESULTS, until, VIEWPORTS, watch } from "./helpers.mjs";
 import { serve } from "./server.mjs";
+import { createFollower, createWheelPage, DIP_LEAD, FILM_CRUISE, PAGE_CRUISE, WHEEL_EVENT, WHEEL_QUEUE } from "../engine/glide.js";
 import { Governor, LADDER } from "../engine/governor.js";
 import { bakeTable, freeRect, sampleTable, trapezoid } from "../engine/rail.js";
 import { classify, QUALITY } from "../engine/tiers.js";
@@ -323,6 +324,14 @@ await check("D4", "anchors land inside the first hold", async () => {
           if (rect.top < 60 || rect.bottom > window.innerHeight) {
             out.push(`${anchor}: caption ${rect.top.toFixed(0)}..${rect.bottom.toFixed(0)}`);
           }
+          /* Inside the hold, because either side of it the caption is fading. */
+          const pin = parseFloat(getComputedStyle(caption).insetBlockEnd);
+          const gap = parseFloat(getComputedStyle(track).paddingBlockEnd);
+          const start = track.getBoundingClientRect().top + scrollY + rect.height + pin - window.innerHeight;
+          const end = start + track.getBoundingClientRect().height - gap - rect.height;
+          if (scrollY < start || scrollY > end) {
+            out.push(`${anchor}: y ${scrollY.toFixed(0)} outside hold ${start.toFixed(0)}..${end.toFixed(0)}`);
+          }
         }
         return out;
       });
@@ -334,7 +343,7 @@ await check("D4", "anchors land inside the first hold", async () => {
 
 await check("D5", "page length stays within budget", async () => {
   const notes = [];
-  for (const [width, height, limit] of [[390, 844, 20.5], [1440, 900, 18.5]]) {
+  for (const [width, height, limit] of [[390, 844, 60], [1440, 900, 56]]) {
     const { context, page } = await tall("/en/", { width, height });
     const screens = await page.evaluate(() => document.documentElement.scrollHeight / window.innerHeight);
     assert(screens <= limit, `${width}: ${screens.toFixed(1)} screens`);
@@ -596,6 +605,7 @@ await check("E3", "the same y gives the same frame, however you got there", asyn
 });
 
 await check("E4", "no blank frames, apart from the two authored dark stretches", async () => {
+  const notes = [];
   for (const [locale, path] of PAGES) {
     const { context, page } = await film(`${path}?tier=L`, { width: 390, height: 844, locale }, { all: true });
     const blank = await page.evaluate(() => {
@@ -604,6 +614,7 @@ await check("E4", "no blank frames, apart from the two authored dark stretches",
       const { shots } = world.layout;
       const max = document.documentElement.scrollHeight - window.innerHeight;
       const out = [];
+      let lit = Infinity;
       for (let i = 0; i <= 50; i += 1) {
         const y = (max * i) / 50;
         world.seek(y);
@@ -626,15 +637,22 @@ await check("E4", "no blank frames, apart from the two authored dark stretches",
         /* Inside the slab, and the fall: black on purpose. */
         const inSlab = y > shots.drop.pinStart && y < shots["svc.head"].pinStart;
         const inFall = y > shots.fall.pinStart && y < shots["why.q"].pinStart;
-        if (variance < 2 && !inSlab && !inFall) {
-          out.push(`y=${Math.round(y)} var=${variance.toFixed(2)}`);
+        /* Flat is not the same as blank: in the CTA hold the phone's lit screen fills a
+           portrait frame. Blank means flat and as dark as the clear colour. */
+        if (variance < 2 && mean < 16 && !inSlab && !inFall) {
+          out.push(`y=${Math.round(y)} var=${variance.toFixed(2)} mean=${mean.toFixed(1)}`);
+        }
+        if (variance < 2 && y > shots.cta.pinStart && y < shots.cta.pinEnd) {
+          lit = Math.min(lit, mean);
         }
       }
-      return out;
+      return { frames: out, lit };
     });
-    assert(blank.length === 0, `${path}: ${blank.join(", ")}`);
+    assert(blank.frames.length === 0, `${path}: ${blank.frames.join(", ")}`);
+    notes.push(`${locale} phone screen mean ${blank.lit.toFixed(1)}`);
     await context.close();
   }
+  return notes.join(", ");
 });
 
 await check("E5", "captions keep 4.5:1 contrast over the world", async () => {
@@ -898,6 +916,63 @@ await check("E13", "governor, rail and tier logic (unit)", () => {
   assert(Math.abs(out[0] - 5) < 0.01 && Math.abs(out[7] - 45) < 0.02, `table sample ${out[0]} ${out[7]}`);
   const wide = freeRect({ x: 156, y: 620, w: 480, h: 120 }, { W: 1440, H: 900, navH: 77, portrait: false });
   assert(wide.x === 684, `landscape subject stands beside the copy, got x=${wide.x}`);
+
+  /* Glide: however hard the input and whatever the frame rate, nothing outruns its
+     cruise, and everything arrives exactly. */
+  const screen = 900;
+  const drive = (events, gap, delta, dt) => {
+    const wheel = createWheelPage();
+    const film = createFollower(0);
+    let native = 0;
+    let y = 0;
+    let sent = 0;
+    let pagePeak = 0;
+    let filmPeak = 0;
+    for (let t = 0; t < 14; t += dt) {
+      while (sent < events && t >= sent * gap) {
+        wheel.input(delta, 0, native, screen, 40000);
+        sent += 1;
+      }
+      const at = wheel.step(native, dt, screen);
+      pagePeak = Math.max(pagePeak, Math.abs(at - native) / dt / screen);
+      native = at;
+      const next = film.step(at, dt, screen);
+      filmPeak = Math.max(filmPeak, Math.abs(next - y) / dt / screen);
+      y = next;
+    }
+    return { native, y, pagePeak, filmPeak };
+  };
+  for (const dt of [1 / 120, 1 / 60, 1 / 30, 1 / 10]) {
+    const hard = drive(120, 0.016, 5000, dt);
+    assert(hard.native > 0 && hard.y === hard.native, `film did not arrive at ${dt}: ${hard.y} vs ${hard.native}`);
+    assert(hard.pagePeak <= PAGE_CRUISE + 0.2, `page ran at ${hard.pagePeak.toFixed(2)} screens/s at ${dt}`);
+    assert(hard.filmPeak <= FILM_CRUISE * 1.03, `film ran at ${hard.filmPeak.toFixed(2)} screens/s at ${dt}`);
+  }
+  const notch = drive(1, 0, 120, 1 / 60);
+  assert(notch.native === 120, `one notch moved ${notch.native}`);
+
+  const wheel = createWheelPage();
+  wheel.input(99999, 0, 5000, screen, 40000);
+  assert(wheel.aim === 5000 + WHEEL_EVENT, `one event asked for ${wheel.aim - 5000}`);
+  for (let i = 0; i < 100; i += 1) {
+    wheel.input(99999, 0, 5000, screen, 40000);
+  }
+  assert(wheel.aim === 5000 + WHEEL_QUEUE * screen, `queue grew to ${wheel.aim - 5000}`);
+  wheel.input(-100, 0, 5000, screen, 40000);
+  assert(wheel.aim === 4900, `reversing kept the queue: ${wheel.aim}`);
+  assert(wheel.step(7000, 1 / 60, screen) === 7000 && !wheel.on, "did not hand back after a native scroll");
+  wheel.input(3, 1, 7000, screen, 40000);
+  assert(wheel.aim === 7120, `three lines asked for ${wheel.aim - 7000}`);
+  const top = createWheelPage();
+  top.input(-100, 0, 0, screen, 40000);
+  assert(top.aim === 0, `scrolled above the page: ${top.aim}`);
+  const bottom = createWheelPage();
+  bottom.input(100, 0, 40000, screen, 40000);
+  assert(bottom.aim === 40000, `scrolled below the page: ${bottom.aim}`);
+
+  const landed = createFollower(0);
+  landed.land(20000, screen);
+  assert(landed.y === 20000 - DIP_LEAD * screen && landed.v > 0, `landed at ${landed.y}`);
   const tallRect = freeRect({ x: 20, y: 620, w: 350, h: 120 }, { W: 390, H: 844, navH: 77, portrait: true });
   assert(tallRect.y === 77 && tallRect.h === 495, `portrait free rect ${tallRect.y} ${tallRect.h}`);
 });
@@ -1054,6 +1129,398 @@ await check("E22", "the old phone's handset is always where the story puts it", 
     assert(distance(state.back, state.start) < 0.01, `${path}: did not come home when scrolling back`);
     await context.close();
   }
+});
+
+const pageHelpers = () => {
+  window.__frames = (count) =>
+    new Promise((done) => {
+      const step = () => (count-- > 0 ? requestAnimationFrame(step) : done());
+      step();
+    });
+  window.__wait = (ms) => new Promise((done) => setTimeout(done, ms));
+  /* What you actually see: an element is as faded as everything around it. */
+  window.__seen = (element) => {
+    let opacity = 1;
+    for (let at = element; at && at !== document.body; at = at.parentElement) {
+      opacity *= parseFloat(getComputedStyle(at).opacity);
+    }
+    return opacity;
+  };
+  window.__trace = [];
+  const step = (now) => {
+    window.__trace.push([now, scrollY, window.__enjazWorld.y]);
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+};
+
+const settled = (page) =>
+  until(page, () => {
+    const trace = window.__trace;
+    const last = trace.at(-1);
+    return trace.length > 20 && last[1] === last[2] && last[1] === trace.at(-20)[1];
+  }, { timeout: 30000 });
+
+const speeds = (trace) => {
+  const rows = [];
+  for (let i = 1; i < trace.length; i += 1) {
+    const dt = (trace[i][0] - trace[i - 1][0]) / 1000;
+    if (dt > 0) {
+      rows.push({ page: Math.abs(trace[i][1] - trace[i - 1][1]) / dt, film: Math.abs(trace[i][2] - trace[i - 1][2]) / dt });
+    }
+  }
+  return rows;
+};
+
+await check("E23", "a hard wheel flick glides, with copy and camera together", async () => {
+  const { context, page } = await film("/en/?tier=L", { width: 1440, height: 900 });
+  await page.evaluate(pageHelpers);
+  await page.mouse.move(720, 450);
+  for (let i = 0; i < 40; i += 1) {
+    await page.mouse.wheel(0, 2000);
+  }
+  await settled(page);
+  const state = await page.evaluate(() => ({ trace: window.__trace, y: window.__enjazWorld.y, top: scrollY, svh: window.__enjazWorld.layout.svh }));
+  const rows = speeds(state.trace);
+  const pagePeak = Math.max(...rows.map((row) => row.page)) / state.svh;
+  const filmPeak = Math.max(...rows.map((row) => row.film)) / state.svh;
+  const lag = Math.max(...state.trace.map((row) => Math.abs(row[1] - row[2]))) / state.svh;
+  assert(state.top > state.svh, `the flick only moved ${state.top}`);
+  assert(state.y === state.top, `film stopped at ${state.y}, page at ${state.top}`);
+  assert(pagePeak <= PAGE_CRUISE * 1.15, `page ran at ${pagePeak.toFixed(2)} screens/s`);
+  assert(filmPeak <= FILM_CRUISE * 1.15, `film ran at ${filmPeak.toFixed(2)} screens/s`);
+  assert(lag <= 1.5, `film fell ${lag.toFixed(2)} screens behind the page`);
+
+  /* Pinch zoom, sideways scrolling and an open drawer stay the browser's. */
+  const prevented = await page.evaluate(() => {
+    const send = (init) => !window.dispatchEvent(new WheelEvent("wheel", { cancelable: true, ...init }));
+    const plain = send({ deltaY: 10 });
+    const pinch = send({ deltaY: 10, ctrlKey: true });
+    const sideways = send({ deltaX: 40, deltaY: 2 });
+    document.body.classList.add("is-nav-open");
+    const drawer = send({ deltaY: 10 });
+    document.body.classList.remove("is-nav-open");
+    return { plain, pinch, sideways, drawer };
+  });
+  assert(prevented.plain, "a plain wheel event was left to the browser");
+  assert(!prevented.pinch && !prevented.sideways && !prevented.drawer, `took over: ${JSON.stringify(prevented)}`);
+  await context.close();
+  return `page ${pagePeak.toFixed(1)}, film ${filmPeak.toFixed(1)} screens/s, lag ${lag.toFixed(2)}`;
+});
+
+await check("E24", "a long jump dips through the dark and glides in", async () => {
+  const { context, page } = await film("/en/?tier=L", { width: 1440, height: 900 });
+  await page.evaluate(pageHelpers);
+  const jump = async (act) => {
+    await settled(page);
+    return page.evaluate(async (code) => {
+      const root = document.documentElement;
+      let dipped = false;
+      const watcher = new MutationObserver(() => {
+        dipped = dipped || root.classList.contains("world-dip");
+      });
+      watcher.observe(root, { attributes: true, attributeFilter: ["class"] });
+      window.__trace.length = 0;
+      if (code === "why") {
+        document.querySelector('.nav a[href="#why"], a[href="#why"]').click();
+      } else {
+        window.scrollTo({ top: 0, behavior: "instant" });
+      }
+      return new Promise((done) => {
+        const started = performance.now();
+        const poll = () => {
+          const last = window.__trace.at(-1);
+          if (performance.now() - started > 800 && last && last[1] === last[2]) {
+            watcher.disconnect();
+            done({ dipped, trace: window.__trace.slice(), ms: performance.now() - started, stillDark: root.classList.contains("world-dip") });
+          } else {
+            setTimeout(poll, 50);
+          }
+        };
+        poll();
+      });
+    }, act);
+  };
+  const notes = [];
+  for (const act of ["why", "top"]) {
+    const result = await jump(act);
+    assert(result.dipped, `${act}: never dipped`);
+    assert(!result.stillDark, `${act}: left dark`);
+    const svh = await page.evaluate(() => window.__enjazWorld.layout.svh);
+    /* The one cut is in the dark. Everything you can see stays at or under cruise. */
+    const fast = speeds(result.trace).filter((row) => row.film / svh > FILM_CRUISE * 1.15);
+    assert(fast.length <= 1, `${act}: ${fast.length} frames over cruise`);
+    assert(result.ms < 12000, `${act}: took ${Math.round(result.ms)} ms`);
+    notes.push(`${act} ${(result.ms / 1000).toFixed(1)}s`);
+  }
+
+  /* The nav link lands on readable copy. */
+  const landed = await page.evaluate(async () => {
+    document.querySelector('a[href="#why"]').click();
+    await window.__wait(2500);
+    const world = window.__enjazWorld;
+    const shot = world.layout.shots["why.q"];
+    const heading = document.querySelector('[data-shot="why.q"] h2');
+    return { top: scrollY, start: shot.pinStart, end: shot.pinEnd, seen: window.__seen(heading) };
+  });
+  assert(landed.top >= landed.start && landed.top <= landed.end, `landed at ${landed.top}, hold ${landed.start}..${landed.end}`);
+  assert(landed.seen > 0.99, `heading at opacity ${landed.seen}`);
+  await context.close();
+  return notes.join(", ");
+});
+
+await check("E25", "captions swap in place, and nothing is left half-faded", async () => {
+  for (const [locale, path] of PAGES) {
+    const tier = locale === "en" ? "M" : "L";
+    const { context, page } = await film(`${path}?tier=${tier}`, { width: 1440, height: 900, locale });
+    await page.evaluate(pageHelpers);
+    const state = await page.evaluate(async (blurred) => {
+      const world = window.__enjazWorld;
+      const { svh, shots } = world.layout;
+      const shot = shots["svc.apps"];
+      const el = document.querySelector('[data-shot="svc.apps"] > .shot');
+      const kid = el.lastElementChild;
+      const pinned = svh - parseFloat(getComputedStyle(el).insetBlockEnd);
+      const read = () => ({
+        whole: parseFloat(getComputedStyle(el).opacity),
+        kid: parseFloat(getComputedStyle(kid).opacity),
+        filter: getComputedStyle(kid).filter,
+        off: Math.abs(el.getBoundingClientRect().bottom - pinned),
+        gone: el.classList.contains("is-gone"),
+        pointer: getComputedStyle(el).pointerEvents,
+      });
+      const at = async (y) => {
+        world.seek(y);
+        await window.__frames(3);
+        return read();
+      };
+      const out = {};
+      out.hold = await at((shot.pinStart + shot.pinEnd) / 2);
+      out.inline = el.getAttribute("style") || "";
+      out.leaving = await at(shot.pinEnd + svh * 0.175);
+      /* Stop there, and it finishes appearing. Software GL can take a while over it. */
+      const stopped = performance.now();
+      while (read().kid < 1 && performance.now() - stopped < 15000) {
+        await window.__wait(100);
+      }
+      out.rested = read();
+      out.arriving = await at(shot.pinStart - svh * 0.175);
+      out.gap = await at(shot.pinEnd + svh * 0.6);
+
+      /* A keyboard user reaching a faded caption gets it back. */
+      const cta = document.querySelector('[data-shot="cta"] > .shot');
+      world.seek(shots.cta.pinEnd + svh * 0.6);
+      await window.__frames(3);
+      const hidden = parseFloat(getComputedStyle(cta).opacity);
+      cta.querySelector("a").focus({ preventScroll: true });
+      const focused = parseFloat(getComputedStyle(cta).opacity);
+      cta.querySelector("a").blur();
+      out.focus = { hidden, focused };
+
+      /* The film stopping hands every caption back. */
+      world.seek(shot.pinEnd + svh * 0.6);
+      await window.__frames(3);
+      document.documentElement.classList.add("world-off");
+      out.off = parseFloat(getComputedStyle(el).opacity);
+      document.documentElement.classList.remove("world-off");
+
+      /* The hero is there from the start. */
+      world.seek(0);
+      await window.__frames(3);
+      out.hero = window.__seen(document.querySelector(".hero__title"));
+      return out;
+    }, tier === "M");
+
+    const label = (name) => `${path} ${name}: ${JSON.stringify(state[name])}`;
+    assert(state.hold.whole === 1 && state.hold.kid === 1 && state.hold.off < 2 && !state.hold.gone, label("hold"));
+    assert(!/opacity|transform/.test(state.inline), `${path} hold kept inline styles: ${state.inline}`);
+    assert(state.leaving.kid < 1, label("leaving"));
+    assert(state.leaving.off < 900 * 0.06, `${path} caption wandered while leaving: ${JSON.stringify(state.leaving)}`);
+    assert(state.rested.whole === 1 && state.rested.kid === 1, label("rested"));
+    assert(state.arriving.kid < 1 && state.arriving.off < 900 * 0.06, label("arriving"));
+    assert(state.gap.whole === 0 && state.gap.gone && state.gap.pointer === "none", label("gap"));
+    assert(state.focus.hidden === 0 && state.focus.focused === 1, label("focus"));
+    assert(state.off === 1, label("off"));
+    assert(state.hero === 1, label("hero"));
+    if (tier === "M") {
+      assert(/blur/.test(state.leaving.filter), label("leaving"));
+    }
+
+    await page.emulateMedia({ media: "print" });
+    const printed = await page.evaluate(() => window.__seen(document.querySelector('[data-shot="svc.apps"] h3')));
+    assert(printed === 1, `${path} print: opacity ${printed}`);
+    await context.close();
+  }
+});
+
+await check("E26", "find-in-page and PageDown always land on readable copy", async () => {
+  const { context, page } = await film("/en/?tier=L", { width: 1440, height: 900 });
+  await page.evaluate(pageHelpers);
+  const missed = await page.evaluate(async () => {
+    const world = window.__enjazWorld;
+    const out = [];
+    for (const heading of document.querySelectorAll(".shot h2, .shot h3")) {
+      world.seek(0);
+      await window.__frames(2);
+      getSelection().removeAllRanges();
+      /* Step through the matches, as the find bar does: "Talk" is also in the nav. */
+      const text = heading.textContent.replace(/\s+/g, " ").trim();
+      let found = false;
+      for (let tries = 0; tries < 12 && !found; tries += 1) {
+        if (!window.find(text)) {
+          break;
+        }
+        found = heading.contains(getSelection().anchorNode);
+      }
+      if (!found) {
+        out.push(`not found: ${text}`);
+        continue;
+      }
+      await window.__wait(1100);
+      const rect = heading.getBoundingClientRect();
+      const seen = window.__seen(heading);
+      if (seen < 0.99 || rect.top < 0 || rect.bottom > window.innerHeight) {
+        out.push(`${heading.textContent.trim().slice(0, 24)}: opacity ${seen.toFixed(2)}, ${rect.top.toFixed(0)}..${rect.bottom.toFixed(0)}`);
+      }
+    }
+    getSelection().removeAllRanges();
+    world.seek(0);
+    return out;
+  });
+  assert(missed.length === 0, `find: ${missed.join(" | ")}`);
+
+  const elements = await page.evaluate(() => {
+    window.__copy = [...document.querySelectorAll(".shot h1, .shot h2, .shot h3, .shot p, .shot .checklist li")].filter((element) => element.getBoundingClientRect().height > 0);
+    window.__readable = new Set();
+    return window.__copy.length;
+  });
+  let done = false;
+  while (!done) {
+    await page.keyboard.press("PageDown");
+    await page.waitForTimeout(950);
+    done = await page.evaluate(() => {
+      const nav = document.querySelector("[data-nav]").getBoundingClientRect().height;
+      for (const element of window.__copy) {
+        const rect = element.getBoundingClientRect();
+        if (rect.top >= nav - 1 && rect.bottom <= window.innerHeight + 1 && window.__seen(element) > 0.99) {
+          window.__readable.add(element);
+        }
+      }
+      return scrollY >= document.documentElement.scrollHeight - window.innerHeight - 2;
+    });
+  }
+  const unread = await page.evaluate(() => window.__copy.filter((element) => !window.__readable.has(element)).map((element) => element.textContent.trim().slice(0, 30)));
+  assert(unread.length === 0, `PageDown never showed: ${unread.join(" | ")}`);
+  await context.close();
+  return `${elements} pieces of copy`;
+});
+
+await check("E28", "if the film stops mid-visit, the page goes back to its normal length at the same caption", async () => {
+  const placed = async (page, id) =>
+    page.evaluate((shot) => {
+      const box = document.querySelector(`[data-shot="${shot}"] > .shot`).getBoundingClientRect();
+      return { top: box.top, bottom: box.bottom, screens: document.documentElement.scrollHeight / window.innerHeight, seen: window.__seen(document.querySelector(`[data-shot="${shot}"] h3`)), scrollY };
+    }, id);
+  const inView = (state) => state.top >= 0 && state.bottom <= 900 && state.seen === 1;
+
+  /* Context loss and restore, part way down the page. */
+  const lost = await film("/en/?tier=L", { width: 1440, height: 900 });
+  await lost.page.evaluate(pageHelpers);
+  await lost.page.evaluate(() => {
+    const { shots } = window.__enjazWorld.layout;
+    window.__enjazWorld.seek((shots["svc.api"].pinStart + shots["svc.api"].pinEnd) / 2);
+    window.__lose = window.__enjazWorld.renderer.getContext().getExtension("WEBGL_lose_context");
+    window.__lose.loseContext();
+  });
+  await until(lost.page, () => document.documentElement.classList.contains("world-off"));
+  const off = await placed(lost.page, "svc.api");
+  assert(off.screens < 25, `still ${off.screens.toFixed(1)} screens tall with no film`);
+  assert(inView(off), `lost the caption: ${JSON.stringify(off)}`);
+  await lost.page.evaluate(() => {
+    setTimeout(() => window.__lose.restoreContext(), 50);
+  });
+  await until(lost.page, () => !document.documentElement.classList.contains("world-off"), { timeout: 30000 });
+  await lost.page.waitForTimeout(500);
+  const back = await placed(lost.page, "svc.api");
+  assert(back.screens > 45, `only ${back.screens.toFixed(1)} screens tall after restore`);
+  assert(inView(back), `lost the caption after restore: ${JSON.stringify(back)}`);
+  const film2 = await lost.page.evaluate(() => [window.__enjazWorld.y, scrollY]);
+  assert(film2[0] === film2[1], `film at ${film2[0]}, page at ${film2[1]}`);
+  await lost.context.close();
+
+  /* Stopping for good: asking for reduced motion mid-visit. */
+  const stopped = await film("/en/?tier=L", { width: 1440, height: 900 });
+  await stopped.page.evaluate(pageHelpers);
+  await stopped.page.evaluate(() => {
+    const { shots } = window.__enjazWorld.layout;
+    window.__enjazWorld.seek((shots["svc.ux"].pinStart + shots["svc.ux"].pinEnd) / 2);
+  });
+  await stopped.page.emulateMedia({ reducedMotion: "reduce" });
+  await until(stopped.page, () => document.documentElement.classList.contains("world-off"));
+  const still = await placed(stopped.page, "svc.ux");
+  assert(still.screens < 25, `still ${still.screens.toFixed(1)} screens tall`);
+  assert(inView(still), `lost the caption: ${JSON.stringify(still)}`);
+  const wheel = await stopped.page.evaluate(() => !window.dispatchEvent(new WheelEvent("wheel", { cancelable: true, deltaY: 40 })));
+  assert(!wheel, "the wheel is still taken over with no film");
+  await stopped.context.close();
+});
+
+await check("E27", "on a phone, touch stays native and the dock covers for a faded button", async () => {
+  const { context, page } = await film("/en/?tier=L", { width: 390, height: 844, hasTouch: true, isMobile: true });
+  await page.evaluate(pageHelpers);
+  const state = await page.evaluate(async () => {
+    const world = window.__enjazWorld;
+    const { svh, shots, pace } = world.layout;
+    const stops = [];
+    for (let i = -1; i <= 13; i += 1) {
+      stops.push(shots.hero.pinEnd + (i * svh) / 10);
+      stops.push(shots.cta.pinStart + ((i - 12) * svh) / 10);
+      stops.push(shots.cta.pinEnd + (i * svh) / 10);
+    }
+    const bad = [];
+    let shifted = 0;
+    for (const y of stops) {
+      world.seek(y);
+      await window.__frames(4);
+      if (document.querySelector('[data-shot="cta"] > .shot').style.transform || document.querySelector('[data-shot="hero"] > .shot').style.transform) {
+        shifted += 1;
+      }
+      const reachable = [...document.querySelectorAll('a[href*="wa.me"]')].some((link) => {
+        const box = link.getBoundingClientRect();
+        if (!box.width || box.bottom <= 0 || box.top >= window.innerHeight || window.__seen(link) < 0.1) {
+          return false;
+        }
+        const hit = document.elementFromPoint(box.left + box.width / 2, Math.min(window.innerHeight - 1, Math.max(0, box.top + box.height / 2)));
+        return hit === link || link.contains(hit);
+      });
+      if (!reachable) {
+        bad.push(Math.round(scrollY));
+      }
+    }
+    return { bad, pace, shifted };
+  });
+  assert(state.pace === 2.4, `pace ${state.pace}`);
+  assert(state.shifted === 0, "captions were moved against the compositor on touch");
+  assert(state.bad.length === 0, `no WhatsApp link at y=${state.bad.slice(0, 8)}`);
+
+  /* A real swipe: the browser scrolls the page, and the film eases along behind it. */
+  const start = await page.evaluate(() => {
+    window.__enjazWorld.seek(0);
+    window.__trace.length = 0;
+    return scrollY;
+  });
+  const cdp = await context.newCDPSession(page);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 200, y: 640 }] });
+  for (let i = 1; i <= 14; i += 1) {
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 200, y: 640 - (i * 500) / 14 }] });
+  }
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await settled(page);
+  const swipe = await page.evaluate(() => ({ top: scrollY, y: window.__enjazWorld.y, behind: window.__trace.some((row) => row[2] < row[1] - 1) }));
+  assert(swipe.top > start + 200, `the swipe moved the page ${swipe.top - start}`);
+  assert(swipe.y === swipe.top, `film at ${swipe.y}, page at ${swipe.top}`);
+  assert(swipe.behind, "the film never eased behind the page");
+  await context.close();
 });
 
 await check("E19", "the 404 page loads no scripts, one image, and shows its copy", async () => {

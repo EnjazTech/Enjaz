@@ -64,13 +64,15 @@ node src/experience/tests/server.mjs --port=8000   # http://127.0.0.1:8000
 `boot.js` imports no three, so a device that fails its GPU check never downloads the
 film. After the lamp comes on, a runtime governor steps quality down one rung at a
 time, and rendering stops entirely while the visitor is reading. If the WebGL context
-is lost the canvas is hidden at once and the nearest still takes over. If it comes
-back, so does the film. A failed stale chunk or a bad benchmark falls back the same way.
+is lost the canvas is hidden at once and the nearest still takes over, and the page
+returns to its normal length at the same caption. If it comes back, so does the film. A
+failed stale chunk or a bad benchmark falls back the same way.
 
 **No frame rate has been measured on a real phone.** The acceptance suite runs on
 software GL, which proves correctness and says nothing about speed. The one real GPU
-tried so far is a laptop's Intel Iris Xe: Tier M, 60 fps scrubbing at 1440x900, with no
-governor steps. That says nothing about a mid-range Android. Open any page with
+tried so far is a laptop's Intel Iris Xe: Tier M, 60 fps at 1440x900 through scrubbing
+and hard wheel flicks, with no governor steps. That says nothing about a mid-range
+Android. Open any page with
 `?hud=1` on a real device to see frame times, tier, draws and triangles, and use
 `?tier=L`, `M`, `H` or `stills` to force a tier. Neither is stored.
 
@@ -94,6 +96,12 @@ state that an anchor jump could skip lives in `world.js`, not in shots. Every ma
 is a `RawShaderMaterial`: `build.mjs` blanks three's own GLSL to save 34 KB, which ties
 the build to three's internals, so its version is pinned and upgrading means rerunning
 the suite.
+
+How the scroll feels has its own controls, modelled on [oryzo.ai](https://oryzo.ai/).
+`--pace` in `main.css` sets how far you scroll for the same film: the world stays the
+same size and the camera takes longer over it. The constants at the top of
+`engine/glide.js` set the speed limits and easing, and those in `engine/captions.js`
+set how captions swap. Rationale and measurements are in the spec's "As built" list.
 
 ## How localization works
 
@@ -145,8 +153,11 @@ at the top of `main.css`. Change a value once to retheme.
 ## Accessibility and progressive enhancement
 
 - Content is **visible by default** and never drawn in WebGL. The canvas sits under
-  the DOM with `pointer-events: none`, so text is selectable, find-in-page and anchors
-  work, and scrolling stays native. There are no wheel listeners and no scroll-snap.
+  the DOM with `pointer-events: none`, so text is selectable and find-in-page and anchors
+  work. Once the film is running the mouse wheel is eased, but touch, keys, the scrollbar
+  and pinch zoom stay the browser's. There is no scroll-snap.
+- Captions fade in and out as you scroll, but stopping part way finishes them, and focus,
+  print and the film stopping all bring them back. A faded button doesn't hide the dock.
 - `prefers-reduced-motion: reduce` gets still images and no film download. The
   blackout stays under 2 flashes a second, and rolls and FOV kicks are capped.
 - Reading order, headings and landmarks match the plain page. The canvas and the
@@ -170,5 +181,6 @@ and Twitter card with a 1200×630 cover · `schema.org` JSON-LD `@graph`
 `npm test --prefix src/experience` runs in headless Chromium on software GL, against
 the real CSP. It compares the JS-blocked page element by element with `main`, and
 covers the layout gate, every fallback path, anchors, keyboard order, contrast,
-budgets at every tier, RTL mirroring, context loss and restore, and the byte budget.
+budgets at every tier, RTL mirroring, context loss and restore, the scroll's speed limits
+and caption swaps, and the byte budget.
 It has only ever run in Chromium: Safari, Firefox and in-app browsers are untested.
