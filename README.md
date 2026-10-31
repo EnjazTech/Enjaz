@@ -47,7 +47,6 @@ src/experience/         The film's source. Not deployed
 Local preview, with the production CSP enforced:
 
 ```sh
-npm ci --prefix src/experience
 node src/experience/tests/server.mjs --port=8000   # http://127.0.0.1:8000
 ```
 
@@ -68,8 +67,10 @@ time, and rendering stops entirely while the visitor is reading. If the WebGL co
 is lost the canvas is hidden at once and the nearest still takes over. If it comes
 back, so does the film. A failed stale chunk or a bad benchmark falls back the same way.
 
-**No frame rate has been measured on a real phone.** Everything here ran on software
-GL, which proves correctness and says nothing about speed. Open any page with
+**No frame rate has been measured on a real phone.** The acceptance suite runs on
+software GL, which proves correctness and says nothing about speed. The one real GPU
+tried so far is a laptop's Intel Iris Xe: Tier M, 60 fps scrubbing at 1440x900, with no
+governor steps. That says nothing about a mid-range Android. Open any page with
 `?hud=1` on a real device to see frame times, tier, draws and triangles, and use
 `?tier=L`, `M`, `H` or `stills` to force a tier. Neither is stored.
 
