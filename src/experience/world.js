@@ -25,7 +25,7 @@ import {
 import { createCaptions } from "./engine/captions.js";
 import { Governor } from "./engine/governor.js";
 import { seeded } from "./engine/geo.js";
-import { createFollower, createWheelPage, DIP_LAG } from "./engine/glide.js";
+import { createAutoplay, createFollower, createWheelPage, DIP_LAG } from "./engine/glide.js";
 import { bakeLayout, watchLayout } from "./engine/layout.js";
 import { bakeKnots, bakeTable, sampleTable, WORLD } from "./engine/rail.js";
 import { createText, waitForFonts } from "./engine/text.js";
@@ -357,6 +357,10 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
 
   const follower = createFollower(window.scrollY);
   const wheelPage = createWheelPage();
+  const auto = createAutoplay();
+  let autoOn = !/[?&]autoplay=0\b/.test(window.location.search);
+  let touching = false;
+  let pressing = false;
   let y = follower.y;
   let dipStart = 0;
   let dipReady = 0;
@@ -539,6 +543,41 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
     }
   }
 
+  /* Moving content needs a way to stop it. Added at lamp-on, and gone with the film. */
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "film-toggle";
+  toggle.addEventListener("click", () => setAutoplay(!autoOn));
+
+  function labelToggle() {
+    const label = dir < 0 ? (autoOn ? "إيقاف التشغيل التلقائي" : "تشغيل تلقائي") : autoOn ? "Pause autoplay" : "Play autoplay";
+    toggle.classList.toggle("is-paused", !autoOn);
+    toggle.setAttribute("aria-label", label);
+    toggle.title = label;
+  }
+
+  function setAutoplay(on) {
+    autoOn = on;
+    labelToggle();
+    auto.wake();
+    if (on) {
+      auto.go();
+    }
+  }
+
+  /* The film only plays itself for someone who is just watching. Selecting text, the
+     find bar, tabbing through links and the open menu all mean they are doing something. */
+  function mayPlay() {
+    if (!autoOn || touching || pressing || wheelPage.on || dipStart || !document.hasFocus() || document.body.classList.contains("is-nav-open")) {
+      return false;
+    }
+    if (!window.getSelection()?.isCollapsed) {
+      return false;
+    }
+    const focused = document.activeElement;
+    return focused === toggle || !focused?.matches(":focus-visible");
+  }
+
   function tick(now) {
     if (stopped) {
       return;
@@ -555,11 +594,17 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
     time += dt;
 
     const native = window.scrollY;
-    const target = wheelPage.step(native, dt, layout.svh);
+    const max = layout.docH - window.innerHeight;
+    const target = auto.step(wheelPage.step(native, dt, layout.svh), dt, layout.svh, max, mayPlay());
     if (target !== native) {
       window.scrollTo({ top: target, behavior: "instant" });
     }
-    captions.update(target, dt);
+    captions.update(target, dt, auto.moving);
+    /* There is nothing left to pause at the end of the page. */
+    const ended = target >= max - 1;
+    if (ended !== toggle.hidden) {
+      toggle.hidden = ended;
+    }
 
     /* Too far behind to glide there: go through the dark and land just short. */
     if (!dipStart && Math.abs(target - y) > DIP_LAG * layout.svh && now > dipReady) {
@@ -586,7 +631,9 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
     if (!dirty && idleHz > 0 && !(tier === "L" && now - lastInput > IDLE_STOP_MS)) {
       dirty = now - lastRender >= 1000 / idleHz - 1;
     }
-    if (cadence && now - lastRender < cadence - 2) {
+    /* Playing by itself keeps the GPU busy all the time, so phones do it at half rate. */
+    const gap = cadence || (auto.moving && (coarse || tier === "L") ? 33.3 : 0);
+    if (gap && now - lastRender < gap - 2) {
       dirty = false;
     }
     if (!dirty) {
@@ -596,7 +643,8 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
     if (scrolling) {
       lastInput = now;
     }
-    if (pendingPixelScale && (!scrolling || (y > layout.shots.fall.pinStart && y < layout.shots.fall.pinEnd))) {
+    /* Autoplay never rests, and a hitch in something this slow is hard to see. */
+    if (pendingPixelScale && (!scrolling || auto.moving || (y > layout.shots.fall.pinStart && y < layout.shots.fall.pinEnd))) {
       pixelScale = pendingPixelScale;
       pendingPixelScale = 0;
       resize();
@@ -613,6 +661,7 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
 
   /* Whatever was under way, the page is the browser's again. */
   function letGo() {
+    auto.wake();
     wheelPage.on = false;
     dipStart = 0;
     root.classList.remove("world-dip");
@@ -622,6 +671,7 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
     stopped = true;
     letGo();
     captions.release();
+    toggle.remove();
   }
 
   /* --------------------------------------------------------------------------
@@ -638,6 +688,31 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
     },
     { passive: true }
   );
+
+  /* Any of these stops autoplay at once. None of them blocks anything. */
+  window.addEventListener("keydown", () => auto.wake(), { passive: true });
+  window.addEventListener(
+    "pointerdown",
+    () => {
+      pressing = true;
+      auto.wake();
+    },
+    { passive: true }
+  );
+  for (const type of ["pointerup", "pointercancel"]) {
+    window.addEventListener(type, () => (pressing = false), { passive: true });
+  }
+  window.addEventListener(
+    "touchstart",
+    () => {
+      touching = true;
+      auto.wake();
+    },
+    { passive: true }
+  );
+  for (const type of ["touchend", "touchcancel"]) {
+    window.addEventListener(type, (event) => (touching = event.touches?.length > 0), { passive: true });
+  }
 
   const projected = new Vector3();
   window.addEventListener(
@@ -757,6 +832,8 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
   captions.update(y, 0);
   draw(0.016);
   root.classList.add("world-on");
+  labelToggle();
+  document.body.append(toggle);
   window.requestAnimationFrame(tick);
   pumpQueue();
 
@@ -765,6 +842,7 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
   window.addEventListener(
     "wheel",
     (event) => {
+      auto.wake();
       if (
         event.ctrlKey ||
         stopped ||
@@ -810,6 +888,11 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
     get y() {
       return y;
     },
+    /** Whether the page is playing by itself right now. */
+    get playing() {
+      return auto.moving;
+    },
+    setAutoplay,
     /** Jump straight to y, with no easing, and draw. */
     seek(target) {
       window.scrollTo({ top: target, behavior: "instant" });

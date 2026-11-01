@@ -97,10 +97,11 @@ export function createCaptions({ inPlace, blur }) {
       lastPos = NaN;
     },
 
-    update(pos, dt) {
+    update(pos, dt, playing = false) {
       still = pos === lastPos ? still + dt : 0;
       lastPos = pos;
-      rest = still > REST_AFTER ? Math.min(1, rest + dt / 0.4) : Math.max(0, rest - dt / 0.12);
+      /* When the film starts drifting by itself, a stopped caption eases off rather than snaps. */
+      rest = still > REST_AFTER ? Math.min(1, rest + dt / 0.4) : Math.max(0, rest - dt / (playing ? 1.2 : 0.12));
 
       for (const item of items) {
         const arriving = item.s > item.a ? clamp01((pos - item.a) / (item.s - item.a)) : 1;

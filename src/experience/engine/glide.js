@@ -17,6 +17,9 @@ export const FILM_CRUISE = 4.2; // Screens a second: a little faster, so the fil
 export const SMOOTH_TIME = 0.2; // Seconds: how far the film's ease reaches.
 export const DIP_LAG = 6; // Screens the film may fall behind before it dips through the dark instead.
 export const DIP_LEAD = 0.8; // Screens short of the page a dip lands, to glide the last stretch.
+export const AUTO_CRUISE = 0.08; // Screens a second when nobody is scrolling: a scene takes over half a minute.
+export const AUTO_IDLE = 2.5; // Seconds after the last input before the film plays by itself.
+export const AUTO_RAMP = 1.6; // Seconds it takes to reach that speed, so you never see it start.
 
 /** The film's y. A second-order smooth damp with a speed limit. Allocation-free. */
 export function createFollower(start = 0) {
@@ -47,6 +50,52 @@ export function createFollower(start = 0) {
       const dir = Math.sign(target - this.y);
       this.y = target - dir * DIP_LEAD * screen;
       this.v = dir * FILM_CRUISE * screen * 0.5;
+    },
+  };
+}
+
+/** Plays the page by itself, very slowly, once nobody has touched it for a while. */
+export function createAutoplay() {
+  return {
+    idle: 0,
+    moving: false,
+    speed: 0,
+    at: 0,
+    seen: 0,
+    /** Someone did something: give way at once, and wait before starting again. */
+    wake() {
+      this.idle = 0;
+      this.moving = false;
+      this.speed = 0;
+    },
+    /** Skips the wait, for when it was asked for. */
+    go() {
+      this.idle = AUTO_IDLE;
+    },
+    /** Returns where the page should be now. native is where the page is. */
+    step(native, dt, screen, max, allowed) {
+      /* Anything but this moved it: momentum, the scrollbar, an anchor, find-in-page. */
+      if (!allowed || Math.abs(native - this.seen) > 2) {
+        this.wake();
+      }
+      this.seen = native;
+      if (!allowed) {
+        return native;
+      }
+      this.idle += dt;
+      if (this.idle < AUTO_IDLE || native >= max - 1) {
+        this.moving = false;
+        this.speed = 0;
+        return native;
+      }
+      if (!this.moving) {
+        this.moving = true;
+        this.at = native;
+      }
+      this.speed = Math.min(1, this.speed + dt / AUTO_RAMP);
+      this.at = Math.min(max, this.at + this.speed * AUTO_CRUISE * screen * dt);
+      this.seen = this.at;
+      return this.at;
     },
   };
 }

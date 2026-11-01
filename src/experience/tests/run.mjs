@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { lampOn, launch, mainFixture, REPO, RESULTS, until, VIEWPORTS, watch } from "./helpers.mjs";
 import { serve } from "./server.mjs";
-import { createFollower, createWheelPage, DIP_LEAD, FILM_CRUISE, PAGE_CRUISE, WHEEL_EVENT, WHEEL_QUEUE } from "../engine/glide.js";
+import { AUTO_CRUISE, AUTO_IDLE, AUTO_RAMP, createAutoplay, createFollower, createWheelPage, DIP_LEAD, FILM_CRUISE, PAGE_CRUISE, WHEEL_EVENT, WHEEL_QUEUE } from "../engine/glide.js";
 import { Governor, LADDER } from "../engine/governor.js";
 import { bakeTable, freeRect, sampleTable, trapezoid } from "../engine/rail.js";
 import { classify, QUALITY } from "../engine/tiers.js";
@@ -973,6 +973,40 @@ await check("E13", "governor, rail and tier logic (unit)", () => {
   const landed = createFollower(0);
   landed.land(20000, screen);
   assert(landed.y === 20000 - DIP_LEAD * screen && landed.v > 0, `landed at ${landed.y}`);
+
+  /* Autoplay: waits, eases in, never passes cruise, gives way at once, stops at the end. */
+  const play = (seconds, dt, from = 1000, max = 40000) => {
+    const player = createAutoplay();
+    player.seen = from;
+    let at = from;
+    let peak = 0;
+    let startedAt = -1;
+    for (let t = 0; t < seconds; t += dt) {
+      const next = player.step(at, dt, screen, max, true);
+      peak = Math.max(peak, (next - at) / dt / screen);
+      if (startedAt < 0 && next !== at) {
+        startedAt = t;
+      }
+      at = next;
+    }
+    return { at, peak, startedAt, player };
+  };
+  const played = play(30, 1 / 60);
+  assert(played.startedAt >= AUTO_IDLE - 0.05 && played.startedAt <= AUTO_IDLE + 0.05, `started after ${played.startedAt} s`);
+  assert(played.peak <= AUTO_CRUISE * 1.001, `played at ${played.peak} screens/s`);
+  const expected = AUTO_CRUISE * screen * (30 - AUTO_IDLE - AUTO_RAMP / 2);
+  assert(Math.abs(played.at - 1000 - expected) < expected * 0.01, `played ${played.at - 1000} px, expected ${expected}`);
+  for (const dt of [1 / 120, 1 / 30, 1 / 10]) {
+    const other = play(30, dt);
+    assert(Math.abs(other.at - played.at) < expected * 0.02, `frame rate changed the distance: ${other.at} vs ${played.at} at ${dt}`);
+  }
+  const player = played.player;
+  assert(player.moving, "not playing after 30 s");
+  assert(player.step(played.at, 1 / 60, screen, 40000, false) === played.at && !player.moving && player.idle === 0, "did not give way when not allowed");
+  const pushed = play(10, 1 / 60);
+  assert(pushed.player.step(pushed.at + 500, 1 / 60, screen, 40000, true) === pushed.at + 500 && !pushed.player.moving, "did not give way to a native scroll");
+  const end = play(30, 1 / 60, 39990, 40000);
+  assert(end.at <= 40000 && !end.player.moving, `ran on to ${end.at} at the end of the page`);
   const tallRect = freeRect({ x: 20, y: 620, w: 350, h: 120 }, { W: 390, H: 844, navH: 77, portrait: true });
   assert(tallRect.y === 77 && tallRect.h === 495, `portrait free rect ${tallRect.y} ${tallRect.h}`);
 });
@@ -1462,6 +1496,7 @@ await check("E28", "if the film stops mid-visit, the page goes back to its norma
   assert(inView(still), `lost the caption: ${JSON.stringify(still)}`);
   const wheel = await stopped.page.evaluate(() => !window.dispatchEvent(new WheelEvent("wheel", { cancelable: true, deltaY: 40 })));
   assert(!wheel, "the wheel is still taken over with no film");
+  assert(!(await stopped.page.evaluate(() => document.querySelector(".film-toggle"))), "the pause button outlived the film");
   await stopped.context.close();
 });
 
@@ -1521,6 +1556,143 @@ await check("E27", "on a phone, touch stays native and the dock covers for a fad
   assert(swipe.y === swipe.top, `film at ${swipe.y}, page at ${swipe.top}`);
   assert(swipe.behind, "the film never eased behind the page");
   await context.close();
+});
+
+await check("E29", "left alone, the film plays itself very slowly, and any input stops it at once", async () => {
+  const { context, page } = await film("/en/?tier=L", { width: 1440, height: 900 });
+  await page.evaluate(pageHelpers);
+  const read = () => page.evaluate(() => ({ top: scrollY, film: window.__enjazWorld.y, playing: window.__enjazWorld.playing }));
+  const playing = () => until(page, () => window.__enjazWorld.playing, { timeout: 30000 });
+  const quiet = (AUTO_IDLE + 0.8) * 1000;
+  const svh = await page.evaluate(() => {
+    const world = window.__enjazWorld;
+    const { shots, svh: height } = world.layout;
+    world.seek(shots["svc.web"].pinStart);
+    return height;
+  });
+
+  /* It waits, then drifts no faster than cruise, with the film alongside. */
+  await page.evaluate(() => {
+    window.__enjazWorld.setAutoplay(true);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Shift" }));
+  });
+  const waiting = await read();
+  await page.waitForTimeout(1200);
+  const after = await read();
+  assert(after.top === waiting.top && !after.playing, `started early: ${JSON.stringify([waiting, after])}`);
+  await playing();
+  await page.waitForTimeout((AUTO_RAMP + 0.6) * 1000);
+  const from = await read();
+  const clock = Date.now();
+  await page.waitForTimeout(4000);
+  const to = await read();
+  const speed = (to.top - from.top) / ((Date.now() - clock) / 1000) / svh;
+  assert(speed > AUTO_CRUISE * 0.25 && speed <= AUTO_CRUISE * 1.15, `played at ${speed.toFixed(3)} screens/s`);
+  assert(Math.abs(to.film - to.top) < 40, `film ${to.film}, page ${to.top}`);
+
+  /* The wheel stops it at once and scrolls as usual, and it comes back afterwards. */
+  await page.mouse.move(720, 450);
+  const before = await read();
+  await page.mouse.wheel(0, 120);
+  await until(page, () => !window.__enjazWorld.playing, { timeout: 2000 });
+  await page.waitForTimeout(1500);
+  const wheeled = await read();
+  assert(wheeled.top >= before.top + 110 && wheeled.top <= before.top + 200, `wheel moved it ${wheeled.top - before.top}`);
+  await playing();
+
+  /* Each of these means someone is doing something, so it holds still for as long as they do. */
+  const holds = [
+    ["a text selection", () => getSelection().selectAllChildren(document.querySelector('[data-shot="svc.web"] h3')), () => getSelection().removeAllRanges()],
+    ["the open menu", () => document.body.classList.add("is-nav-open"), () => document.body.classList.remove("is-nav-open")],
+    ["the find bar", () => (document.hasFocus = () => false), () => delete document.hasFocus],
+    ["a finger on the screen", () => window.dispatchEvent(new Event("touchstart")), () => window.dispatchEvent(new Event("touchend"))],
+    ["a pressed mouse button", () => window.dispatchEvent(new PointerEvent("pointerdown")), () => window.dispatchEvent(new PointerEvent("pointerup"))],
+  ];
+  for (const [name, on, off] of holds) {
+    await page.evaluate(() => window.__enjazWorld.setAutoplay(true));
+    await playing();
+    await page.evaluate(on);
+    await page.waitForTimeout(300);
+    const held = await read();
+    await page.waitForTimeout(quiet);
+    const still = await read();
+    assert(!still.playing && still.top === held.top, `${name} did not hold it: ${JSON.stringify([held, still])}`);
+    await page.evaluate(off);
+  }
+  await playing();
+
+  /* Tabbing through links holds it too, because the link you reached must not drift away. */
+  await page.keyboard.press("Tab");
+  const tabbed = await page.evaluate(() => document.activeElement.matches(":focus-visible"));
+  assert(tabbed, "Tab did not reach anything");
+  const focused = await read();
+  await page.waitForTimeout(quiet);
+  const stillFocused = await read();
+  assert(!stillFocused.playing && stillFocused.top === focused.top, "drifted away from the focused link");
+  await page.evaluate(() => document.activeElement.blur());
+  await playing();
+
+  /* The pause button. */
+  const button = page.locator(".film-toggle");
+  assert((await button.getAttribute("aria-label")) === "Pause autoplay", "wrong label while playing");
+  await button.click();
+  assert((await button.getAttribute("aria-label")) === "Play autoplay", "wrong label while paused");
+  const paused = await read();
+  await page.waitForTimeout(quiet);
+  const stillPaused = await read();
+  assert(!stillPaused.playing && stillPaused.top === paused.top, "the pause button did not hold it");
+  await button.click();
+  await page.mouse.move(720, 450);
+  await until(page, () => window.__enjazWorld.playing, { timeout: 2000 });
+
+  /* It stops at the end of the page, and doesn't loop. */
+  const last = await page.evaluate(() => {
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+    window.__enjazWorld.seek(max - 10);
+    window.__enjazWorld.setAutoplay(true);
+    return max;
+  });
+  await until(page, (end) => scrollY >= end - 1, { timeout: 30000, arg: last });
+  await page.waitForTimeout(1200);
+  const finished = await page.evaluate(() => ({ top: scrollY, playing: window.__enjazWorld.playing, hidden: document.querySelector(".film-toggle").hidden }));
+  assert(finished.top >= last - 1 && !finished.playing && finished.hidden, `at the end: ${JSON.stringify(finished)}`);
+  await context.close();
+
+  /* A real finger, on a phone. */
+  const touch = await film("/en/?tier=L", { width: 390, height: 844, hasTouch: true, isMobile: true });
+  await touch.page.evaluate(() => {
+    const { shots } = window.__enjazWorld.layout;
+    window.__enjazWorld.seek(shots["svc.web"].pinStart);
+    window.__enjazWorld.setAutoplay(true);
+  });
+  await until(touch.page, () => window.__enjazWorld.playing, { timeout: 30000 });
+  const cdp = await touch.context.newCDPSession(touch.page);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 200, y: 500 }] });
+  await touch.page.waitForTimeout(300);
+  const down = await touch.page.evaluate(() => [scrollY, window.__enjazWorld.playing]);
+  await touch.page.waitForTimeout(quiet);
+  const heldDown = await touch.page.evaluate(() => [scrollY, window.__enjazWorld.playing]);
+  assert(!down[1] && !heldDown[1] && down[0] === heldDown[0], `moved under a finger: ${down} ${heldDown}`);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await until(touch.page, () => window.__enjazWorld.playing, { timeout: 30000 });
+  await touch.context.close();
+
+  /* The Arabic label, and the way to turn it off from the URL. */
+  const off = await open("/?tier=L&autoplay=0", { width: 1440, height: 900, locale: "ar" });
+  await until(off.page, () => document.documentElement.classList.contains("world-on"), { timeout: 120000 });
+  await off.page.waitForTimeout(quiet);
+  const arabic = await off.page.evaluate(() => ({ playing: window.__enjazWorld.playing, top: scrollY, label: document.querySelector(".film-toggle").getAttribute("aria-label"), display: getComputedStyle(document.querySelector(".film-toggle")).display }));
+  assert(!arabic.playing && arabic.top === 0, `?autoplay=0 played: ${JSON.stringify(arabic)}`);
+  assert(arabic.label === "تشغيل تلقائي" && arabic.display === "block", `button: ${JSON.stringify(arabic)}`);
+  await off.context.close();
+
+  /* Reduced motion gets no film, so nothing moves and there is nothing to pause. */
+  const reduced = await open("/en/", { width: 1440, height: 900, reducedMotion: "reduce" });
+  await reduced.page.waitForTimeout(quiet);
+  const calm = await reduced.page.evaluate(() => ({ top: scrollY, button: !!document.querySelector(".film-toggle") }));
+  assert(calm.top === 0 && !calm.button, `reduced motion: ${JSON.stringify(calm)}`);
+  await reduced.context.close();
+  return `${speed.toFixed(3)} screens/s (cruise ${AUTO_CRUISE})`;
 });
 
 await check("E19", "the 404 page loads no scripts, one image, and shows its copy", async () => {

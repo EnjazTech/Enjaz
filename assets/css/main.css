@@ -1212,7 +1212,8 @@ button {
 }
 @media print {
   .wa-dock,
-  .world {
+  .world,
+  .film-toggle {
     display: none !important;
   }
   .shot,
@@ -1608,6 +1609,48 @@ button {
   html.world-dip body::after {
     opacity: 1;
     transition: opacity 0.18s ease-in;
+  }
+  /* Pauses autoplay. world.js adds it, so it only exists while the film does. */
+  .film-toggle {
+    display: none;
+    position: fixed;
+    inset-block-end: 1rem;
+    inset-inline-start: 1rem;
+    z-index: 60;
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0;
+    border: 1px solid rgba(232, 236, 244, 0.28);
+    border-radius: 50%;
+    background: rgba(7, 8, 12, 0.72);
+    color: var(--color-text);
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity var(--duration-fast) var(--ease-out);
+  }
+  html.world-on:not(.world-off) .film-toggle:not([hidden]) {
+    display: block;
+  }
+  .film-toggle:hover,
+  .film-toggle:focus-visible {
+    opacity: 1;
+  }
+  .film-toggle::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 0.75rem;
+    height: 0.875rem;
+    margin: auto;
+    forced-color-adjust: none;
+    background: linear-gradient(90deg, currentColor 34%, transparent 34% 66%, currentColor 66%);
+  }
+  .film-toggle.is-paused::before {
+    background: currentColor;
+    clip-path: polygon(8% 0, 100% 50%, 8% 100%);
+  }
+  body.is-nav-open .film-toggle {
+    visibility: hidden;
   }
   /* Captions swap in place, scrubbed by world.js. Whatever stops the film, or a keyboard
      user arriving, gets the copy back as written. */
