@@ -63,8 +63,7 @@ node src/experience/tests/server.mjs --port=8000   # http://127.0.0.1:8000
 
 `boot.js` imports no three, so a device that fails its GPU check never downloads the
 film. After the lamp comes on, a runtime governor steps quality down one rung at a
-time. Left alone, the page plays itself very slowly, and rendering mostly stops once
-it's paused or has reached the end. If the WebGL context
+time, and rendering stops entirely while the visitor is reading. If the WebGL context
 is lost the canvas is hidden at once and the nearest still takes over, and the page
 returns to its normal length at the same caption. If it comes back, so does the film. A
 failed stale chunk or a bad benchmark falls back the same way.
@@ -101,10 +100,8 @@ the suite.
 How the scroll feels has its own controls, modelled on [oryzo.ai](https://oryzo.ai/).
 `--pace` in `main.css` sets how far you scroll for the same film: the world stays the
 same size and the camera takes longer over it. The constants at the top of
-`engine/glide.js` set the speed limits, easing and autoplay (`AUTO_CRUISE` is how fast
-the film plays itself, `AUTO_IDLE` how long it waits), and those in
-`engine/captions.js` set how captions swap. `?autoplay=0` starts paused. Rationale and
-measurements are in the spec's "As built" list.
+`engine/glide.js` set the speed limits and easing, and those in `engine/captions.js`
+set how captions swap. Rationale and measurements are in the spec's "As built" list.
 
 ## How localization works
 
@@ -159,15 +156,12 @@ at the top of `main.css`. Change a value once to retheme.
   the DOM with `pointer-events: none`, so text is selectable and find-in-page and anchors
   work. Once the film is running the mouse wheel is eased, but touch, keys, the scrollbar
   and pinch zoom stay the browser's. There is no scroll-snap.
-- Left alone, the page scrolls itself very slowly. Any input stops it at once, and a
-  pause button stops it for good. Reduced motion gets no film and no autoplay.
 - Captions fade in and out as you scroll, but stopping part way finishes them, and focus,
   print and the film stopping all bring them back. A faded button doesn't hide the dock.
 - `prefers-reduced-motion: reduce` gets still images and no film download. The
   blackout stays under 2 flashes a second, and rolls and FOV kicks are capped.
 - Reading order, headings and landmarks match the plain page. The canvas and the
-  caption-less spacers are `aria-hidden`. The only added tab stops are the dock, last,
-  and after it the pause button while the film is running.
+  caption-less spacers are `aria-hidden`, and the only added tab stop is the dock, last.
 - Every caption sits on a scrim that holds at least 4.5:1 over any frame. In the tall
   layout a WhatsApp link is visible and tappable at every scroll position.
 - Skip link, one `<h1>` per page, `aria-labelledby` on every section,
@@ -187,6 +181,6 @@ and Twitter card with a 1200×630 cover · `schema.org` JSON-LD `@graph`
 `npm test --prefix src/experience` runs in headless Chromium on software GL, against
 the real CSP. It compares the JS-blocked page element by element with `main`, and
 covers the layout gate, every fallback path, anchors, keyboard order, contrast,
-budgets at every tier, RTL mirroring, context loss and restore, the scroll's speed limits,
-caption swaps and autoplay, and the byte budget.
+budgets at every tier, RTL mirroring, context loss and restore, the scroll's speed limits
+and caption swaps, and the byte budget.
 It has only ever run in Chromium: Safari, Firefox and in-app browsers are untested.

@@ -62,12 +62,8 @@ export async function until(page, predicate, { timeout = 60000, every = 100, arg
   }
 }
 
-/* Frames and measurements need the page to stay where it was put, so autoplay goes
-   off here. E29 is the check that turns it back on. */
-export const lampOn = async (page, timeout = 120000) => {
-  await until(page, () => document.documentElement.classList.contains("world-on"), { timeout });
-  await page.evaluate(() => window.__enjazWorld.setAutoplay(false));
-};
+export const lampOn = (page, timeout = 120000) =>
+  until(page, () => document.documentElement.classList.contains("world-on"), { timeout });
 
 /** Today's site, extracted from main, for parity checks. */
 export function mainFixture() {

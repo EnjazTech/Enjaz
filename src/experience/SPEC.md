@@ -38,7 +38,6 @@ Where the build departed from the contract below, and why.
   - **Captions swap in place.** `engine/captions.js` fades, unblurs and slides each caption's children in reading order over 0.35 screens of scroll, cancelling 85% of its travel so it stays near its pin. On touch it does not cancel travel, because a main-thread transform would fight the compositor's scroll, and it skips the blur, as it does on Tier L. No per-letter stagger as on Oryzo, because Arabic letters join. Stopping mid-swap finishes the caption, and that is what keeps find-in-page and PageDown readable, because both land in these stretches. A caption over 70% of the screen tall stays plain scrolling copy. CSS hands everything back on focus, in print, under `world-off` and without `w3d`, and a faded button no longer hides the WhatsApp dock.
   - **Long jumps dip.** More than 6 screens behind the page, the film goes through the dark for 190 ms and lands 0.8 screens short, moving, rather than whipping past every scene. Anchors under `w3d` are instant for the same reason.
   - **`world-off` sets `--pace` to 1,** with `keepPlace` in `main.js` holding the visitor at the same caption, because a long runway with no film is a slog. A restored context brings it back.
-- **Autoplay, on request.** Left alone for 2.5 s, the page drifts at 0.08 screens a second (`engine/glide.js`), easing in over 1.6 s, so the film seems to play itself. A scene takes over half a minute and the whole film about 11 minutes, and it stops at the end of the page rather than looping. Any input stops it at once, and so does anything that means someone is doing something: a selection, the find bar (through `document.hasFocus()`), keyboard focus on a control, a finger or mouse button held down, the open menu. Moving content that starts by itself needs a way to stop it (WCAG 2.2.2), so there is a pause button. JS adds it at lamp-on, so the plain page is unchanged, and `?autoplay=0` starts paused. While it plays this gives up "a resting page costs no GPU" in Section 3.7, so coarse pointers and Tier L draw at 30 Hz. Reduced motion gets no film, so no autoplay.
 
 
 ## 0. Decisions at a glance
@@ -989,7 +988,6 @@ Viewports unless stated: 360x640, 390x844, 412x915, 768x1024, 1280x720, 1440x900
 | E26 | Find-in-page and real PageDown | Every heading and every piece of copy is readable where they land |
 | E27 | Touch phone | A real swipe scrolls natively with the film easing behind, no transform on captions, a WhatsApp link reachable throughout |
 | E28 | The film stopping mid-visit | Normal page length at the same caption, the wheel handed back, and the runway returns on restore |
-| E29 | Autoplay | Waits, then stays under cruise with the film alongside. The wheel, a selection, the find bar, the menu, a finger or button held down and keyboard focus each stop it. The pause button works, it stops at the end of the page, and reduced motion gets none |
 
 ## 14. Evidence log
 
