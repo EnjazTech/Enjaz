@@ -29,7 +29,10 @@ export function bakeLayout() {
   const navH = nav ? nav.getBoundingClientRect().height : 0;
   const dir = document.documentElement.dir === "rtl" ? -1 : 1;
   const docH = document.documentElement.scrollHeight;
-  const pace = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--pace")) || 1;
+  const rootStyle = getComputedStyle(document.documentElement);
+  const pace = parseFloat(rootStyle.getPropertyValue("--pace")) || 1;
+  /* The empty stretch after each caption has its own pace, shorter on touch. */
+  const paceGap = parseFloat(rootStyle.getPropertyValue("--pace-gap")) || pace;
   const shots = {};
 
   for (const track of document.querySelectorAll("[data-shot]")) {
@@ -65,7 +68,7 @@ export function bakeLayout() {
     shots[id] = shot;
   }
 
-  return { W, H, svh, lvh, navH, docH, dir, pace, portrait: H >= W, shots };
+  return { W, H, svh, lvh, navH, docH, dir, pace, paceGap, portrait: H >= W, shots };
 }
 
 /** Sets up rebaking. On touch, height-only changes are the URL bar: ignore them. */

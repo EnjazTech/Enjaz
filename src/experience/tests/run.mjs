@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { lampOn, launch, mainFixture, REPO, RESULTS, until, VIEWPORTS, watch } from "./helpers.mjs";
 import { serve } from "./server.mjs";
-import { createFollower, createWheelPage, DIP_LEAD, FILM_CRUISE, PAGE_CRUISE, WHEEL_EVENT, WHEEL_QUEUE } from "../engine/glide.js";
+import { createFollower, createPacer, createWheelPage, DETENT_MAX, DETENT_REST, DIP_LEAD, EMPTY_CRUISE, EMPTY_SPEED, FILM_CRUISE, PAGE_CRUISE, WHEEL_EVENT, WHEEL_QUEUE } from "../engine/glide.js";
 import { Governor, LADDER } from "../engine/governor.js";
 import { bakeTable, freeRect, sampleTable, trapezoid } from "../engine/rail.js";
 import { classify, QUALITY } from "../engine/tiers.js";
@@ -973,6 +973,62 @@ await check("E13", "governor, rail and tier logic (unit)", () => {
   const landed = createFollower(0);
   landed.land(20000, screen);
   assert(landed.y === 20000 - DIP_LEAD * screen && landed.v > 0, `landed at ${landed.y}`);
+  /* Pacing: the wheel crosses empty scroll EMPTY_SPEED times as far, and stops on a
+     caption before it can skip it. Copy at 0..2000 and 12000..14000 on a 20000 page. */
+  const pacer = createPacer();
+  pacer.bake({ zones: [[0, 2000], [12000, 14000]], down: [12300], up: [14000, 2000] }, 20000, screen);
+  assert(pacer.speed(1000) === 1 && pacer.speed(7000) === EMPTY_SPEED, `speeds ${pacer.speed(1000)} ${pacer.speed(7000)}`);
+  for (const y of [0, 1500, 6123, 12999, 20000]) {
+    assert(Math.abs(pacer.fromEffort(pacer.toEffort(y)) - y) < 0.5, `effort round trip at ${y}`);
+  }
+  const reading = createWheelPage(pacer);
+  reading.input(100, 0, 1000, screen, 19100);
+  assert(Math.abs(reading.aim - 1100) < 0.01, `one notch through copy went ${reading.aim - 1000}`);
+  const empty = createWheelPage(pacer);
+  empty.input(100, 0, 7000, screen, 19100);
+  assert(Math.abs(empty.aim - (7000 + 100 * EMPTY_SPEED)) < 1, `one notch through empty went ${empty.aim - 7000}`);
+  /* A push that never lets up: it stops on the caption, is held there for at most
+     DETENT_MAX, then carries on. */
+  const flick = createWheelPage(pacer);
+  let flickAt = 2500;
+  let clock = 0;
+  let heldFrom = -1;
+  let heldTo = -1;
+  for (let i = 0; i < 400; i += 1) {
+    if (i % 2 === 0) {
+      flick.input(5000, 0, flickAt, screen, 19100, clock);
+    }
+    const next = flick.step(flickAt, 1 / 60, screen, clock);
+    assert(Math.abs(next - flickAt) / screen * 60 <= PAGE_CRUISE * EMPTY_CRUISE + 0.2, `page ran at ${Math.abs(next - flickAt) / screen * 60}`);
+    if (next === 12300 && heldFrom < 0) {
+      heldFrom = clock;
+    }
+    if (next > 12300 && heldFrom >= 0 && heldTo < 0) {
+      heldTo = clock;
+    }
+    flickAt = next;
+    clock += 1000 / 60;
+  }
+  assert(heldFrom > 0, "a flick from copy to copy never stopped on the caption at 12300");
+  const held = (heldTo - heldFrom) / 1000;
+  assert(held >= DETENT_MAX - 0.05 && held <= DETENT_MAX + 0.1, `an unbroken push was held ${held.toFixed(2)} s`);
+  /* A fresh push after a pause carries on once DETENT_REST is up. */
+  const fresh = createWheelPage(pacer);
+  fresh.input(200, 0, 12150, screen, 19100, 0);
+  let freshAt = 12150;
+  let arrived = 0;
+  for (; freshAt !== 12300 && arrived < 3000; arrived += 1000 / 60) {
+    freshAt = fresh.step(freshAt, 1 / 60, screen, arrived);
+  }
+  assert(freshAt === 12300, `one notch into a caption stopped at ${freshAt}`);
+  fresh.input(100, 0, freshAt, screen, 19100, arrived + 50);
+  assert(fresh.aim === 12300, "a second notch during the rest moved the page off the caption");
+  fresh.input(100, 0, freshAt, screen, 19100, arrived + DETENT_REST * 1000 + 50);
+  assert(fresh.aim > 12300, "a fresh push after the rest was swallowed");
+  const back = createWheelPage(pacer);
+  back.input(-200, 0, 12300, screen, 19100);
+  assert(back.aim < 12300, "could not scroll back off a caption");
+
   const tallRect = freeRect({ x: 20, y: 620, w: 350, h: 120 }, { W: 390, H: 844, navH: 77, portrait: true });
   assert(tallRect.y === 77 && tallRect.h === 495, `portrait free rect ${tallRect.y} ${tallRect.h}`);
 });
@@ -1185,10 +1241,16 @@ await check("E23", "a hard wheel flick glides, with copy and camera together", a
   const pagePeak = Math.max(...rows.map((row) => row.page)) / state.svh;
   const filmPeak = Math.max(...rows.map((row) => row.film)) / state.svh;
   const lag = Math.max(...state.trace.map((row) => Math.abs(row[1] - row[2]))) / state.svh;
+  const starts = await page.evaluate(() => Object.entries(window.__enjazWorld.layout.shots).filter(([id, shot]) => shot.caption && id !== "hero").map(([id, shot]) => [id, shot.pinStart]));
   assert(state.top > state.svh, `the flick only moved ${state.top}`);
+  /* It crosses the empty stretches fast, and stops on every caption it reaches, fully shown. */
+  const passed = starts.filter(([, start]) => start < state.top - 2);
+  assert(passed.length > 0, `the flick reached no caption, stopping at ${state.top}`);
+  const skipped = passed.filter(([, start]) => !state.trace.some((row) => Math.abs(row[1] - start) <= 1));
+  assert(skipped.length === 0, `skipped ${skipped.map(([id]) => id)}`);
   assert(state.y === state.top, `film stopped at ${state.y}, page at ${state.top}`);
-  assert(pagePeak <= PAGE_CRUISE * 1.15, `page ran at ${pagePeak.toFixed(2)} screens/s`);
-  assert(filmPeak <= FILM_CRUISE * 1.15, `film ran at ${filmPeak.toFixed(2)} screens/s`);
+  assert(pagePeak <= PAGE_CRUISE * EMPTY_CRUISE * 1.15, `page ran at ${pagePeak.toFixed(2)} screens/s`);
+  assert(filmPeak <= FILM_CRUISE * EMPTY_CRUISE * 1.15, `film ran at ${filmPeak.toFixed(2)} screens/s`);
   assert(lag <= 1.5, `film fell ${lag.toFixed(2)} screens behind the page`);
 
   /* Pinch zoom, sideways scrolling and an open drawer stay the browser's. */
@@ -1205,7 +1267,7 @@ await check("E23", "a hard wheel flick glides, with copy and camera together", a
   assert(prevented.plain, "a plain wheel event was left to the browser");
   assert(!prevented.pinch && !prevented.sideways && !prevented.drawer, `took over: ${JSON.stringify(prevented)}`);
   await context.close();
-  return `page ${pagePeak.toFixed(1)}, film ${filmPeak.toFixed(1)} screens/s, lag ${lag.toFixed(2)}`;
+  return `stopped on ${passed.length} captions, page ${pagePeak.toFixed(1)}, film ${filmPeak.toFixed(1)} screens/s, lag ${lag.toFixed(2)}`;
 });
 
 await check("E24", "a long jump dips through the dark and glides in", async () => {

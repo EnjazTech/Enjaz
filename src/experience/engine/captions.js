@@ -8,7 +8,7 @@
  * ever left half-faded: find-in-page and PageDown both land in these stretches.
  */
 
-const ZONE = 0.35; // Screens of scroll each swap takes.
+export const ZONE = 0.35; // Screens of scroll each swap takes.
 const IN_PLACE = 0.85; // How much of its travel through a swap a caption cancels.
 const SLIDE = 1.1; // em.
 const BLUR = 0.28; // em.

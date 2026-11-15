@@ -99,9 +99,18 @@ the suite.
 
 How the scroll feels has its own controls, modelled on [oryzo.ai](https://oryzo.ai/).
 `--pace` in `main.css` sets how far you scroll for the same film: the world stays the
-same size and the camera takes longer over it. The constants at the top of
+same size and the camera takes longer over it. `--pace-gap` does the same for the empty
+stretch after each caption, and is shorter on touch screens. The constants at the top of
 `engine/glide.js` set the speed limits and easing, and those in `engine/captions.js`
-set how captions swap. Rationale and measurements are in the spec's "As built" list.
+set how captions swap.
+
+The wheel is paced by what is on screen, so the copy is what you notice. Where a caption
+is showing, it moves at reading speed. Across the empty stretches between captions the
+same wheel goes `EMPTY_SPEED` (4) times as far, then brakes into the next caption and
+stops where it is fully shown. The rest of that push is held there (`DETENT_REST`,
+`DETENT_MAX`), so one hard flick cannot skip the services or the pricing. On a desktop
+this is about 33 screens of wheeling for a 52-screen page. Touch stays native, so a
+phone gets shorter empty stretches instead: 31 screens, down from 46. Rationale and measurements are in the spec's "As built" list.
 
 ## How localization works
 

@@ -153,8 +153,8 @@ export function bakeKnots(layout, metas) {
     }
     const prev = list[i - 1];
     if (s.meta.floor === "locked") {
-      /* Taken out of --pace, because pace stretches the scroll and not the world. */
-      const transit = (prev.shot.gap ?? 0) / (layout.pace ?? 1) + (s.shot.caption?.h ?? 0);
+      /* Taken out of --pace-gap, because pace stretches the scroll and not the world. */
+      const transit = (prev.shot.gap ?? 0) / (layout.paceGap ?? layout.pace ?? 1) + (s.shot.caption?.h ?? 0);
       const sep = k * transit * 2 * prev.d * Math.tan((prev.fov * DEG) / 2) / H;
       y -= Math.max(3.6, sep);
     } else {

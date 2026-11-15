@@ -22,10 +22,10 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import { createCaptions } from "./engine/captions.js";
+import { createCaptions, ZONE } from "./engine/captions.js";
 import { Governor } from "./engine/governor.js";
 import { seeded } from "./engine/geo.js";
-import { createFollower, createWheelPage, DIP_LAG } from "./engine/glide.js";
+import { createFollower, createPacer, createWheelPage, DIP_LAG } from "./engine/glide.js";
 import { bakeLayout, watchLayout } from "./engine/layout.js";
 import { bakeKnots, bakeTable, sampleTable, WORLD } from "./engine/rail.js";
 import { createText, waitForFonts } from "./engine/text.js";
@@ -151,11 +151,35 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
   let archiveOffY = 0;
   const pad = () => layout.svh * 0.15;
   const captions = createCaptions({ inPlace: !coarse, blur: !coarse && tier !== "L" });
+  const pacer = createPacer();
+
+  /* Copy is showing from the moment a caption starts to swap in until it starts to
+     leave. The wheel stops where it is fully shown: its pin start going down, its
+     pin end coming back up. */
+  function paceZones(baked) {
+    const zones = [];
+    const down = [];
+    const up = [];
+    for (const [id, shot] of Object.entries(baked.shots)) {
+      if (!shot.caption) {
+        continue;
+      }
+      if (id === "hero") {
+        zones.push([0, shot.pinEnd]);
+      } else {
+        zones.push([shot.pinStart - ZONE * baked.svh, shot.pinEnd]);
+        down.push(shot.pinStart);
+      }
+      up.push(shot.pinEnd);
+    }
+    return { zones, down, up };
+  }
 
   function bake() {
     captions.release();
     layout = bakeLayout();
     captions.bake(layout);
+    pacer.bake(paceZones(layout), layout.docH, layout.svh);
     const baked = bakeKnots(layout, METAS);
     solved = baked.solved;
     docH = layout.docH;
@@ -356,7 +380,7 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
   const p = { t: 0, enter: 0, hold: 0, exit: 0, y: 0, v: 0, time: 0, dt: 0, px: 0, py: 0, pointer: 0 };
 
   const follower = createFollower(window.scrollY);
-  const wheelPage = createWheelPage();
+  const wheelPage = createWheelPage(pacer);
   let y = follower.y;
   let dipStart = 0;
   let dipReady = 0;
@@ -555,7 +579,7 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
     time += dt;
 
     const native = window.scrollY;
-    const target = wheelPage.step(native, dt, layout.svh);
+    const target = wheelPage.step(native, dt, layout.svh, now);
     if (target !== native) {
       window.scrollTo({ top: target, behavior: "instant" });
     }
@@ -573,7 +597,7 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
     }
 
     const scrolling = Math.abs(target - follower.y) > 0.25 || Math.abs(follower.v) > 2;
-    y = follower.step(target, dt, layout.svh);
+    y = follower.step(target, dt, layout.svh, pacer.speed(follower.y));
 
     smoothX += (pointerX - smoothX) * Math.min(1, dt * 6);
     smoothY += (pointerY - smoothY) * Math.min(1, dt * 6);
@@ -776,7 +800,7 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
         return;
       }
       event.preventDefault();
-      wheelPage.input(event.deltaY, event.deltaMode, window.scrollY, layout.svh, layout.docH - layout.svh);
+      wheelPage.input(event.deltaY, event.deltaMode, window.scrollY, layout.svh, layout.docH - layout.svh, performance.now());
       lastInput = performance.now();
     },
     { passive: false }
@@ -800,6 +824,7 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
     governor,
     scene,
     stop,
+    pacer,
     get layout() {
       return layout;
     },

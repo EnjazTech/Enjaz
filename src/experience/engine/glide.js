@@ -1,8 +1,12 @@
 /**
- * How the page and the film move when you scroll: slowly, however hard you scroll.
- * The wheel is taken over and eased, so copy and camera move together; touch stays
- * native, and the film glides after it. Distances and speeds are in screens, so a
- * phone and a 4K monitor feel the same.
+ * How the page and the film move when you scroll. The wheel is taken over and eased,
+ * so copy and camera move together; touch stays native, and the film glides after it.
+ * Distances and speeds are in screens, so a phone and a 4K monitor feel the same.
+ *
+ * The wheel is paced by what is on screen. Where there is copy to read it moves
+ * slowly; across the empty stretches between captions the same wheel travels
+ * EMPTY_SPEED times as far, and it brakes into the next caption and stops where that
+ * caption is fully shown, so one hard flick can never skip past the copy.
  *
  * No DOM here, so it runs under plain Node for tests.
  */
@@ -17,17 +21,107 @@ export const FILM_CRUISE = 4.2; // Screens a second: a little faster, so the fil
 export const SMOOTH_TIME = 0.2; // Seconds: how far the film's ease reaches.
 export const DIP_LAG = 6; // Screens the film may fall behind before it dips through the dark instead.
 export const DIP_LEAD = 0.8; // Screens short of the page a dip lands, to glide the last stretch.
+export const EMPTY_SPEED = 4; // How much further the wheel goes where no copy is showing.
+export const EMPTY_CRUISE = 2.5; // Times PAGE_CRUISE and FILM_CRUISE allowed there, so a transit is still seen.
+export const BRAKE = 0.45; // Screens over which the wheel slows into a caption, or speeds up leaving one.
+export const DETENT_REST = 0.35; // Seconds a caption always holds the wheel once the page stops on it.
+export const DETENT_MAX = 1.2; // Seconds it may hold a push that keeps coming, like a trackpad's coast.
+export const DETENT_PAUSE = 0.14; // Seconds without wheel input that end a push.
+
+const PACE_SAMPLES = 8192;
+const smoothstep = (u) => u * u * (3 - 2 * u);
+
+/**
+ * The wheel's pacing over the page. zones are [from, to] stretches of scroll where
+ * copy is showing; down and up are where the wheel stops, in each direction, so
+ * that the caption is fully shown. Without zones it paces nothing: speed 1, no stops.
+ */
+export function createPacer() {
+  let docH = 0;
+  let step = 1;
+  let effort = null; // Effort to reach each sample: scroll y divided by the speed there.
+  let speeds = null;
+  let down = [];
+  let up = [];
+
+  const sampleAt = (y) => Math.min(PACE_SAMPLES - 1, Math.max(0, y / step));
+
+  return {
+    bake({ zones, down: downStops = [], up: upStops = [] }, height, screen) {
+      docH = Math.max(1, height);
+      step = docH / (PACE_SAMPLES - 1);
+      effort = new Float64Array(PACE_SAMPLES);
+      speeds = new Float32Array(PACE_SAMPLES);
+      const brake = BRAKE * screen;
+      for (let i = 0; i < PACE_SAMPLES; i += 1) {
+        const y = i * step;
+        let distance = Infinity;
+        for (const [from, to] of zones) {
+          distance = Math.min(distance, y < from ? from - y : y > to ? y - to : 0);
+        }
+        speeds[i] = 1 + (EMPTY_SPEED - 1) * smoothstep(Math.min(1, distance / brake));
+        if (i > 0) {
+          effort[i] = effort[i - 1] + (step * 2) / (speeds[i - 1] + speeds[i]);
+        }
+      }
+      /* Whole pixels, because that is where the page comes to rest. */
+      down = downStops.map(Math.round).sort((a, b) => a - b);
+      up = upStops.map(Math.round).sort((a, b) => b - a);
+    },
+    /** How fast the wheel moves the page at y, from 1 (copy) to EMPTY_SPEED. */
+    speed(y) {
+      return speeds ? speeds[Math.round(sampleAt(y))] : 1;
+    },
+    toEffort(y) {
+      if (!effort) {
+        return y;
+      }
+      const f = sampleAt(y);
+      const i = Math.min(PACE_SAMPLES - 2, Math.floor(f));
+      const beyond = Math.max(0, y - docH) + Math.min(0, y);
+      return effort[i] + (effort[i + 1] - effort[i]) * (f - i) + beyond;
+    },
+    fromEffort(e) {
+      if (!effort) {
+        return e;
+      }
+      const last = effort[PACE_SAMPLES - 1];
+      if (e <= 0 || e >= last) {
+        return e <= 0 ? e : docH + (e - last);
+      }
+      let low = 0;
+      let high = PACE_SAMPLES - 1;
+      while (high - low > 1) {
+        const mid = (low + high) >> 1;
+        if (effort[mid] <= e) {
+          low = mid;
+        } else {
+          high = mid;
+        }
+      }
+      return (low + (e - effort[low]) / (effort[high] - effort[low])) * step;
+    },
+    /** The first stop strictly past from and not past to, in the direction of travel. */
+    stop(from, to) {
+      if (to > from) {
+        return down.find((y) => y > from + 0.5 && y <= to) ?? null;
+      }
+      return up.find((y) => y < from - 0.5 && y >= to) ?? null;
+    },
+  };
+}
 
 /** The film's y. A second-order smooth damp with a speed limit. Allocation-free. */
 export function createFollower(start = 0) {
   return {
     y: start,
     v: 0,
-    step(target, dt, screen) {
+    /** boost lets the film keep up where the wheel is running fast. */
+    step(target, dt, screen, boost = 1) {
       const omega = 2 / SMOOTH_TIME;
       const x = omega * dt;
       const decay = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
-      const reach = FILM_CRUISE * screen * SMOOTH_TIME;
+      const reach = FILM_CRUISE * Math.min(boost, EMPTY_CRUISE) * screen * SMOOTH_TIME;
       const change = clamp(this.y - target, -reach, reach);
       const temp = (this.v + omega * change) * dt;
       this.v = (this.v - omega * temp) * decay;
@@ -51,14 +145,19 @@ export function createFollower(start = 0) {
   };
 }
 
-/** The page's position while the wheel is driving it. */
-export function createWheelPage() {
+/**
+ * The page's position while the wheel is driving it. The wheel's input queues up in
+ * effort, which the pacer turns into scroll: the same notch goes further across an
+ * empty stretch than through copy.
+ */
+export function createWheelPage(pacer = createPacer()) {
   return {
     on: false,
-    at: 0,
-    aim: 0,
+    at: 0, // Scroll y.
+    aim: 0, // Scroll y the wheel has asked for.
     written: 0,
-    input(deltaY, deltaMode, from, screen, max) {
+    rest: null, // { y, dir, since, last }: the caption the page has just stopped on.
+    input(deltaY, deltaMode, from, screen, max, now = 0) {
       if (!this.on) {
         this.on = true;
         this.at = from;
@@ -68,37 +167,56 @@ export function createWheelPage() {
       /* Some browsers report lines or pages rather than pixels. */
       const unit = deltaMode === 1 ? 40 : deltaMode === 2 ? screen : 1;
       const delta = clamp(deltaY * unit, -WHEEL_EVENT, WHEEL_EVENT);
+      /* Just stopped on a caption: the rest of the same push is spent there. A new
+         push, after a pause, carries on. */
+      const rest = this.rest;
+      if (rest && Math.sign(delta) === rest.dir && Math.abs(this.at - rest.y) < 2) {
+        const held = now - rest.since;
+        if (held < DETENT_REST * 1000 || (held < DETENT_MAX * 1000 && now - rest.last < DETENT_PAUSE * 1000)) {
+          rest.last = now;
+          this.aim = this.at;
+          return;
+        }
+      }
+      this.rest = null;
       /* Changing direction cancels whatever was still queued the other way. */
       const base =
         Math.sign(delta) === -Math.sign(this.aim - this.at)
           ? this.at
           : this.aim;
       const queue = WHEEL_QUEUE * screen;
-      this.aim = clamp(
-        base + delta,
-        Math.max(0, this.at - queue),
-        Math.min(max, this.at + queue),
-      );
+      const at = pacer.toEffort(this.at);
+      const aim = clamp(pacer.toEffort(base) + delta, at - queue, at + queue);
+      let next = clamp(pacer.fromEffort(aim), 0, max);
+      /* Never past a caption the page has not yet stopped on. */
+      const stop = pacer.stop(this.at, next);
+      if (stop !== null) {
+        next = stop;
+      }
+      this.aim = next;
     },
     /** Returns where the page should be now. native is where the browser says it is. */
-    step(native, dt, screen) {
+    step(native, dt, screen, now = 0) {
       if (!this.on) {
         return native;
       }
       /* The scrollbar, the keyboard, an anchor or find-in-page moved it: hand it back. */
       if (Math.abs(native - this.written) > 2) {
         this.on = false;
+        this.rest = null;
         return native;
       }
-      const limit = PAGE_CRUISE * screen * dt;
-      this.at += clamp(
-        (this.aim - this.at) * (1 - Math.exp(-WHEEL_EASE * dt)),
-        -limit,
-        limit,
-      );
+      const at = pacer.toEffort(this.at);
+      const eased = pacer.fromEffort(at + (pacer.toEffort(this.aim) - at) * (1 - Math.exp(-WHEEL_EASE * dt)));
+      const limit = PAGE_CRUISE * Math.min(pacer.speed(this.at), EMPTY_CRUISE) * screen * dt;
+      this.at += clamp(eased - this.at, -limit, limit);
       if (Math.abs(this.aim - this.at) < 0.5) {
+        const dir = Math.sign(this.aim - this.written);
         this.at = this.aim;
         this.on = false;
+        if (pacer.stop(this.aim - dir * 3, this.aim) === this.aim) {
+          this.rest = { y: this.aim, dir, since: now, last: now };
+        }
       }
       this.written = Math.round(this.at);
       return this.written;

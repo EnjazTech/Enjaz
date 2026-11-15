@@ -1313,9 +1313,13 @@ button {
   }
 
   /* Tall layout. --pace is how far you scroll for the same film: the world stays
-     the same size, and the camera takes longer over it. */
+     the same size, and the camera takes longer over it. --pace-gap paces the empty
+     stretches between captions. With a mouse the wheel already crosses those fast
+     (glide.js), so it matches --pace; touch scrolls natively, so on a phone the
+     empty stretches are simply shorter and the copy keeps its full length. */
   html.w3d {
     --pace: 3;
+    --pace-gap: var(--pace);
     --pin: 12svh;
     --gap: 66svh;
     --span: 34svh;
@@ -1325,6 +1329,7 @@ button {
   @media (pointer: coarse) {
     html.w3d {
       --pace: 2.4;
+      --pace-gap: 1.2;
     }
   }
   @media (orientation: portrait) and (min-width: 48rem) {
@@ -1425,8 +1430,8 @@ button {
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
-    min-height: calc((var(--gap) + var(--span)) * var(--pace));
-    padding-block-end: calc(var(--gap) * var(--pace));
+    min-height: calc(var(--gap) * var(--pace-gap) + var(--span) * var(--pace));
+    padding-block-end: calc(var(--gap) * var(--pace-gap));
   }
   html.w3d .shot {
     display: block;
@@ -1469,7 +1474,7 @@ button {
     margin-block-end: 30svh;
   }
   html.w3d .ticker.track {
-    min-height: calc(110svh * var(--pace));
+    min-height: calc(110svh * var(--pace-gap));
     padding: 0;
     border: 0;
     background: none;
@@ -1484,15 +1489,15 @@ button {
   }
   html.w3d .fall.track {
     display: block;
-    min-height: calc(60svh * var(--pace));
+    min-height: calc(60svh * var(--pace-gap));
     padding: 0;
   }
   @media (orientation: landscape) {
     html.w3d .ticker.track {
-      min-height: calc(90svh * var(--pace));
+      min-height: calc(90svh * var(--pace-gap));
     }
     html.w3d .fall.track {
-      min-height: calc(50svh * var(--pace));
+      min-height: calc(50svh * var(--pace-gap));
     }
   }
 
@@ -1589,6 +1594,7 @@ button {
   }
   html.world-off {
     --pace: 1;
+    --pace-gap: 1;
   }
   html.world-off .world,
   html.world-off body::after {
