@@ -1313,13 +1313,14 @@ button {
   }
 
   /* Tall layout. --pace is how far you scroll for the same film: the world stays
-     the same size, and the camera takes longer over it. --pace-gap paces the empty
-     stretches between captions. With a mouse the wheel already crosses those fast
-     (glide.js), so it matches --pace; touch scrolls natively, so on a phone the
-     empty stretches are simply shorter and the copy keeps its full length. */
+     the same size, and the camera takes longer over it. --pace-gap paces the stretch
+     between two captions, and is kept just long enough for one caption to hand over
+     to the next (captions.js), so there is never a screen with no copy on it: the
+     camera makes its move while the copy swaps. A caption on touch scrolls in from
+     below rather than swapping in place, so it needs a slightly shorter stretch. */
   html.w3d {
     --pace: 3;
-    --pace-gap: var(--pace);
+    --pace-gap: 1;
     --pin: 12svh;
     --gap: 66svh;
     --span: 34svh;
@@ -1329,7 +1330,7 @@ button {
   @media (pointer: coarse) {
     html.w3d {
       --pace: 2.4;
-      --pace-gap: 1.2;
+      --pace-gap: 0.7;
     }
   }
   @media (orientation: portrait) and (min-width: 48rem) {
@@ -1473,8 +1474,10 @@ button {
     inset-block-end: auto;
     margin-block-end: 30svh;
   }
+  /* The drop and the fall have no copy of their own, so they are only as long as
+     the hand-over from the caption before to the caption after. */
   html.w3d .ticker.track {
-    min-height: calc(110svh * var(--pace-gap));
+    min-height: 46svh;
     padding: 0;
     border: 0;
     background: none;
@@ -1489,15 +1492,15 @@ button {
   }
   html.w3d .fall.track {
     display: block;
-    min-height: calc(60svh * var(--pace-gap));
+    min-height: 8svh;
     padding: 0;
+  }
+  html.w3d [data-shot="step.ship"] {
+    --gap: 30svh;
   }
   @media (orientation: landscape) {
     html.w3d .ticker.track {
-      min-height: calc(90svh * var(--pace-gap));
-    }
-    html.w3d .fall.track {
-      min-height: calc(50svh * var(--pace-gap));
+      min-height: 40svh;
     }
   }
 
@@ -1529,8 +1532,9 @@ button {
       --span: 44svh;
     }
   }
+  /* A short tail, so the page ends with the call to action still on screen. */
   html.w3d .cta.track {
-    --gap: 70svh;
+    --gap: 34svh;
     --span: 60svh;
     padding-inline: var(--space-gutter);
     margin-inline: auto;
@@ -1594,7 +1598,6 @@ button {
   }
   html.world-off {
     --pace: 1;
-    --pace-gap: 1;
   }
   html.world-off .world,
   html.world-off body::after {

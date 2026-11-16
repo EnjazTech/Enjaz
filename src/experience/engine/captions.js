@@ -6,9 +6,15 @@
  * It follows the page rather than the film, because the page is what you are reading.
  * If you stop part way through a swap the caption finishes appearing, so nothing is
  * ever left half-faded: find-in-page and PageDown both land in these stretches.
+ *
+ * Two captions in a row share the stretch between them, so the film never shows a
+ * screen with no copy on it. Swapping in place, the first leaves over its first half
+ * and the next arrives over the second, so they are never on top of each other. On
+ * touch they scroll, so the first stays until the next has scrolled fully into view.
  */
 
 export const ZONE = 0.35; // Screens of scroll each swap takes.
+const ZONE_MAX = 0.5; // The most a swap stretches to, to meet the caption next to it.
 const IN_PLACE = 0.85; // How much of its travel through a swap a caption cancels.
 const SLIDE = 1.1; // em.
 const BLUR = 0.28; // em.
@@ -88,10 +94,29 @@ export function createCaptions({ inPlace, blur }) {
             s: id === "hero" ? -1 : shot.pinStart,
             e: shot.pinEnd,
             b: shot.pinEnd + zone,
+            pin: shot.pin ?? 0,
             shown: -1,
             shift: 0,
             gone: false,
           });
+        }
+      }
+      /* Neighbours share the stretch between them. In place they meet in the middle.
+         Scrolling, the next one is fully in view its pin short of where it stops. */
+      const most = ZONE_MAX * layout.svh;
+      for (let i = 1; i < items.length; i += 1) {
+        const before = items[i - 1];
+        const after = items[i];
+        const stretch = after.s - before.e;
+        if (stretch <= 0) {
+          continue;
+        }
+        if (inPlace) {
+          const half = Math.min(most, stretch / 2);
+          before.b = before.e + half;
+          after.a = after.s - half;
+        } else {
+          before.b = before.e + Math.min(most, Math.max(zone, stretch - after.pin));
         }
       }
       lastPos = NaN;

@@ -38,6 +38,10 @@ Where the build departed from the contract below, and why.
   - **Captions swap in place.** `engine/captions.js` fades, unblurs and slides each caption's children in reading order over 0.35 screens of scroll, cancelling 85% of its travel so it stays near its pin. On touch it does not cancel travel, because a main-thread transform would fight the compositor's scroll, and it skips the blur, as it does on Tier L. No per-letter stagger as on Oryzo, because Arabic letters join. Stopping mid-swap finishes the caption, and that is what keeps find-in-page and PageDown readable, because both land in these stretches. A caption over 70% of the screen tall stays plain scrolling copy. CSS hands everything back on focus, in print, under `world-off` and without `w3d`, and a faded button no longer hides the WhatsApp dock.
   - **Long jumps dip.** More than 6 screens behind the page, the film goes through the dark for 190 ms and lands 0.8 screens short, moving, rather than whipping past every scene. Anchors under `w3d` are instant for the same reason.
   - **`world-off` sets `--pace` to 1,** with `keepPlace` in `main.js` holding the visitor at the same caption, because a long runway with no film is a slog. A restored context brings it back.
+- **No screen without copy, on request (branch `minimize-3d`).** The owner found the stretches of world with nothing to read too long, the way down from the hero to the services above all. The world, the shots and the camera moves are unchanged; only the scroll between captions is shorter, so each move plays while one caption hands over to the next. This overrides the page lengths above and below:
+  - **Gaps.** `--pace-gap` is 1, and 0.7 on coarse pointers (it was 3 and 1.2). The drop is a 40svh spacer in landscape and 46svh in portrait, the fall 8svh, and `step.ship` and the CTA have gaps of 30svh and 34svh, since nothing is spaced from them. The CTA's leaves a tail of 0.3 screens, so the page ends with the call to action still showing above the footer. Every stretch between two captions is now 0.5 to 1 screen, measured in both locales at 360x640, 390x844, 768x1024, 1280x720, 1440x900 and 1920x1080. It was 1.8 on a desktop, 3.0 for the drop and 3.6 for the fall. `rail.js` still divides `--pace-gap` back out, so the floors are where they were.
+  - **Neighbours share the stretch.** Swapping in place, `captions.js` splits the stretch between two captions in half: the first leaves over its half and the next arrives over the other, up to 0.5 screens each. So there is no scroll position with no caption, stopping anywhere finishes one, and two captions never sit on top of each other. On touch a caption scrolls in from below rather than swapping in place, so the stretch is shorter there, and the caption before stays until the next has scrolled fully into view.
+  - **Length.** 29.2 screens at 1440x900 (was 51.8) and about 24 on a touch phone at 390x844 (was 31.3).
 
 
 ## 0. Decisions at a glance
@@ -55,7 +59,7 @@ Where the build departed from the contract below, and why.
 | Other dev-only tools | `harfbuzzjs`, `wawoff2`, `playwright`. None ship |
 | Bytes | About 175 KB gzip -6 in total (three 116, own code about 59). CI hard gate 200 KB |
 | Tier L budget | 0.55 MP, at most 28 draws, at most 70k triangles, 60 fps target |
-| Page length | 46.1 screens on a touch phone at 412x839, 57.1 at 390x844 with a fine pointer, 51.8 at 1440x900 (plain page 5.9 and 3.9) |
+| Page length | 24 screens on a touch phone at 390x844, 30.7 there with a fine pointer, 29.2 at 1440x900 (plain page 5.9 and 3.9). See As built |
 
 ## 1. Narrative and visual language
 
@@ -952,7 +956,7 @@ Viewports unless stated: 360x640, 390x844, 412x915, 768x1024, 1280x720, 1440x900
 | D2 | Each caption at mid-hold, bottom edge at `svh - pin` | Within 2 px |
 | D3 | At 25% of each hold on portrait up to 480 px wide | No other caption below the nav |
 | D4 | `#services`, `#process`, `#why` landing | Inside the hold, tolerance -60 px |
-| D5 | Page length | At most 60 screens in portrait, at most 56 in landscape |
+| D5 | Page length | At most 34 screens in portrait, at most 32 in landscape |
 | D6 | `layout-shift` total through lamp-on | At most 0.01, including a software-GL collapse at the top of the page |
 | D7 | PageDown 87.5% steps | Every text line fully visible in at least one step |
 | D8 | `window.find` on each h3 | Selection inside the viewport |

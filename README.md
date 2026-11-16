@@ -99,18 +99,23 @@ the suite.
 
 How the scroll feels has its own controls, modelled on [oryzo.ai](https://oryzo.ai/).
 `--pace` in `main.css` sets how far you scroll for the same film: the world stays the
-same size and the camera takes longer over it. `--pace-gap` does the same for the empty
-stretch after each caption, and is shorter on touch screens. The constants at the top of
+same size and the camera takes longer over it. `--pace-gap` does the same for the
+stretch between two captions, and is kept short: 1, and 0.7 on touch screens. That
+stretch is 0.5 to 1 screen, just long enough for one caption to hand over to the next
+while the camera makes its move, so no screen is ever without copy and stopping
+anywhere leaves a caption fully shown. The drop and the fall, which have no copy of
+their own, are spacers sized the same way. The constants at the top of
 `engine/glide.js` set the speed limits and easing, and those in `engine/captions.js`
 set how captions swap.
 
 The wheel is paced by what is on screen, so the copy is what you notice. Where a caption
-is showing, it moves at reading speed. Across the empty stretches between captions the
-same wheel goes `EMPTY_SPEED` (4) times as far, then brakes into the next caption and
-stops where it is fully shown. The rest of that push is held there (`DETENT_REST`,
-`DETENT_MAX`), so one hard flick cannot skip the services or the pricing. On a desktop
-this is about 33 screens of wheeling for a 52-screen page. Touch stays native, so a
-phone gets shorter empty stretches instead: 31 screens, down from 46. Rationale and measurements are in the spec's "As built" list.
+is showing, it moves at reading speed. Away from copy the same wheel goes further, up
+to `EMPTY_SPEED` (4) times as far, though the stretches between captions are now so
+short that it reaches about twice. It then brakes into the next caption and stops
+where it is fully shown. The rest of that push is held there (`DETENT_REST`,
+`DETENT_MAX`), so one hard flick cannot skip the services or the pricing. The page is
+about 30 screens on a desktop and 24 on a phone, where touch stays native. Rationale
+and measurements are in the spec's "As built" list.
 
 ## How localization works
 

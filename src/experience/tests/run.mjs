@@ -343,7 +343,7 @@ await check("D4", "anchors land inside the first hold", async () => {
 
 await check("D5", "page length stays within budget", async () => {
   const notes = [];
-  for (const [width, height, limit] of [[390, 844, 60], [1440, 900, 56]]) {
+  for (const [width, height, limit] of [[390, 844, 34], [1440, 900, 32]]) {
     const { context, page } = await tall("/en/", { width, height });
     const screens = await page.evaluate(() => document.documentElement.scrollHeight / window.innerHeight);
     assert(screens <= limit, `${width}: ${screens.toFixed(1)} screens`);
@@ -1369,9 +1369,10 @@ await check("E25", "captions swap in place, and nothing is left half-faded", asy
       out.arriving = await at(shot.pinStart - svh * 0.175);
       out.gap = await at(shot.pinEnd + svh * 0.6);
 
-      /* A keyboard user reaching a faded caption gets it back. */
-      const cta = document.querySelector('[data-shot="cta"] > .shot');
-      world.seek(shots.cta.pinEnd + svh * 0.6);
+      /* A keyboard user reaching a faded caption gets it back. The hero, because
+         the page ends before the last caption has gone. */
+      const cta = document.querySelector('[data-shot="hero"] > .shot');
+      world.seek(shots.hero.pinEnd + svh * 0.45);
       await window.__frames(3);
       const hidden = parseFloat(getComputedStyle(cta).opacity);
       cta.querySelector("a").focus({ preventScroll: true });
@@ -1504,7 +1505,7 @@ await check("E28", "if the film stops mid-visit, the page goes back to its norma
   await until(lost.page, () => !document.documentElement.classList.contains("world-off"), { timeout: 30000 });
   await lost.page.waitForTimeout(500);
   const back = await placed(lost.page, "svc.api");
-  assert(back.screens > 45, `only ${back.screens.toFixed(1)} screens tall after restore`);
+  assert(back.screens > off.screens * 1.5, `only ${back.screens.toFixed(1)} screens tall after restore, against ${off.screens.toFixed(1)} without the film`);
   assert(inView(back), `lost the caption after restore: ${JSON.stringify(back)}`);
   const film2 = await lost.page.evaluate(() => [window.__enjazWorld.y, scrollY]);
   assert(film2[0] === film2[1], `film at ${film2[0]}, page at ${film2[1]}`);
