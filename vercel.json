@@ -12,24 +12,6 @@
       "source": "/",
       "has": [
         {
-          "type": "header",
-          "key": "accept-language",
-          "value": "^\\s*(?!ar\\b)[a-z]{2}(-[A-Za-z0-9]+)?\\s*(;q=(1(\\.0+)?|0\\.[5-9]\\d*))?\\s*(,.*)?$"
-        }
-      ],
-      "missing": [
-        {
-          "type": "cookie",
-          "key": "enjaz_lang"
-        }
-      ],
-      "destination": "/en/",
-      "permanent": false
-    },
-    {
-      "source": "/",
-      "has": [
-        {
           "type": "cookie",
           "key": "enjaz_lang",
           "value": "en"

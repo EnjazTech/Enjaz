@@ -9,7 +9,8 @@
  *   1. `?lang=xx` in the URL wins and is remembered.
  *   2. Otherwise a previously remembered choice wins (localStorage, then a
  *      same-value cookie the edge redirect in vercel.json also reads).
- *   3. Otherwise the device language (navigator.languages) decides, once.
+ *   3. Otherwise the visitor stays on the page they opened: Arabic at `/`,
+ *      whatever the device language, and English only from the toggle or /en/.
  *
  * Search engines are told about both documents via hreflang, so the redirect
  * never hides content from a crawler.
@@ -89,21 +90,6 @@
     return match && isSupported(match[1]) ? match[1] : null;
   }
 
-  /** First supported language in the device's ordered preference list. */
-  function detectLang() {
-    var tags = navigator.languages && navigator.languages.length
-      ? navigator.languages
-      : [navigator.language || ""];
-
-    for (var i = 0; i < tags.length; i += 1) {
-      var base = String(tags[i]).toLowerCase().split("-")[0];
-      if (isSupported(base)) {
-        return base;
-      }
-    }
-    return null;
-  }
-
   /** Strips any known locale prefix, returning the bare, locale-less path. */
   function bareePath() {
     var path = window.location.pathname;
@@ -142,14 +128,8 @@
   var explicit = requestedLang();
   var stored = readStored() || readCookie();
 
-  /*
-   * Device detection only ever applies to the default-language document
-   * (the x-default URL, "/"). Someone who landed on /en/ — from search, a
-   * shared link, or the toggle — asked for English, and must not be bounced
-   * out of it.
-   */
-  var detected = current === DEFAULT_LANG ? detectLang() : null;
-  var target = explicit || stored || detected;
+  /* No device detection: the site opens in Arabic until the visitor picks English. */
+  var target = explicit || stored;
 
   if (explicit) {
     writeStored(explicit);

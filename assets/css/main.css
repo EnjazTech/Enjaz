@@ -413,6 +413,7 @@ button {
   font-family: var(--font-mono);
   font-size: 0.5625rem;
   letter-spacing: 0.25em;
+  white-space: nowrap;
 }
 
 .nav__menu {
@@ -433,6 +434,7 @@ button {
 
 .nav__toggle {
   display: none;
+  flex: none;
   align-items: center;
   justify-content: center;
   width: 2.75rem;
@@ -548,23 +550,73 @@ button {
   font-size: 1.0625rem;
 }
 
-.lang-switch {
-  padding: 0.4375rem 0.875rem;
+/* The language switch: both languages always in the bar, the current one lit. */
+.nav__end {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  order: 1;
+}
+
+.lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-pill);
+  background: rgba(232, 236, 244, 0.04);
+}
+
+.lang__icon {
+  flex: none;
+  margin-inline: 0.4375rem 0.1875rem;
+  color: var(--color-text-dim);
+}
+
+.lang__opt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.75rem;
+  min-height: 2.25rem;
+  padding-inline: 0.75rem;
+  border-radius: var(--radius-pill);
   color: var(--color-text-muted);
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1;
   white-space: nowrap;
   transition:
-    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out);
 }
 
-.lang-switch:hover,
-.lang-switch:focus-visible {
-  border-color: rgba(93, 255, 222, 0.5);
+.lang__opt--ar {
+  font-family: var(--font-arabic);
+}
+
+.lang__opt--en {
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+}
+
+.lang__opt[aria-current] {
+  background: rgba(93, 255, 222, 0.16);
   color: var(--color-mint);
+}
+
+a.lang__opt:hover,
+a.lang__opt:focus-visible {
+  background: rgba(232, 236, 244, 0.08);
+  color: var(--color-text);
+}
+
+/* Wide: the links sit against the switch at the far end of the bar. */
+@media (min-width: 56.3125rem) {
+  .nav__menu {
+    margin-inline-start: auto;
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -1093,7 +1145,6 @@ button {
     background: rgba(93, 255, 222, 0.06);
   }
 
-  .nav__menu .lang-switch,
   .nav__menu .btn--pill {
     margin-block-start: 0.5rem;
     text-align: center;
