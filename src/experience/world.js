@@ -13,10 +13,14 @@
 
 import {
   ColorManagement,
+  GLSL3,
   Group,
   LinearSRGBColorSpace,
+  Mesh,
   PerspectiveCamera,
+  PlaneGeometry,
   Quaternion,
+  RawShaderMaterial,
   Scene,
   Vector2,
   Vector3,
@@ -27,7 +31,7 @@ import { Governor } from "./engine/governor.js";
 import { seeded } from "./engine/geo.js";
 import { createFollower, createPacer, createWheelPage, DIP_LAG } from "./engine/glide.js";
 import { bakeLayout, watchLayout } from "./engine/layout.js";
-import { bakeKnots, bakeTable, sampleTable, WORLD } from "./engine/rail.js";
+import { bakeKnots, bakeTable, findCuts, sampleTable, WORLD } from "./engine/rail.js";
 import { createText, waitForFonts } from "./engine/text.js";
 import { QUALITY } from "./engine/tiers.js";
 import { createPrograms } from "./programs.js";
@@ -141,6 +145,24 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
     scene.add(runtime.group);
   });
 
+  /* The dark a cut passes through: one quad over everything, drawn only near a cut. */
+  const curtain = new Mesh(
+    new PlaneGeometry(2, 2),
+    new RawShaderMaterial({
+      glslVersion: GLSL3,
+      uniforms: { uDim: { value: 0 } },
+      vertexShader: `in vec3 position; void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+      fragmentShader: `precision mediump float; uniform float uDim; out vec4 fragColor;
+        void main() { fragColor = vec4(0.0275, 0.0314, 0.0471, uDim); }`,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+    })
+  );
+  curtain.frustumCulled = false;
+  curtain.visible = false;
+  scene.add(curtain);
+
   let layout = null;
   let solved = null;
   let table = null;
@@ -178,12 +200,13 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
   function bake() {
     captions.release();
     layout = bakeLayout();
-    captions.bake(layout);
+    const cuts = findCuts(layout, METAS);
+    captions.bake(layout, cuts.map((cut) => cut.y));
     pacer.bake(paceZones(layout), layout.docH, layout.svh);
     const baked = bakeKnots(layout, METAS);
     solved = baked.solved;
     docH = layout.docH;
-    table = bakeTable(baked.knots, docH);
+    table = bakeTable(baked.knots, docH, cuts.filter((cut) => cut.to - cut.from >= 1).map((cut) => cut.y));
 
     const auto = solved["svc.auto"];
     const word = solved["process.head"];
@@ -207,13 +230,12 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
     shared.uLitY.value.set(WORLD.slabBottom, word.floorY + 4);
     archive.setRange(WORLD.slabBottom, word.floorY);
 
-    /* Sets swap only in the dark: inside the slab, and in the fall. */
-    const dropRange = layout.shots.drop;
-    const fallRange = layout.shots.fall;
-    deskOffY = dropRange.pinStart + (dropRange.pinEnd - dropRange.pinStart) * 0.86;
-    deskFlipY = fallRange.pinStart + (fallRange.pinEnd - fallRange.pinStart) * 0.5;
-    archiveOnY = dropRange.pinStart + (dropRange.pinEnd - dropRange.pinStart) * 0.8;
-    archiveOffY = fallRange.pinStart + (fallRange.pinEnd - fallRange.pinStart) * 0.4;
+    /* Sets swap only in the dark: at the cut into the archive, and at the cut out of it. */
+    const cutInto = (id) => cuts.find((cut) => cut.after === id).y;
+    deskOffY = cutInto("svc.head");
+    archiveOnY = deskOffY;
+    deskFlipY = cutInto("why.q");
+    archiveOffY = deskFlipY;
 
     for (const runtime of runtimes) {
       const i = runtime.index;
@@ -224,6 +246,14 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
       runtime.s = shot.pinStart;
       runtime.e = shot.pinEnd;
       runtime.b = next ? next.pinStart : docH;
+      /* A shot stays until the cut that ends it, and starts at the cut that opens it. */
+      for (const cut of cuts) {
+        if (cut.before === runtime.meta.id) {
+          runtime.b = cut.y;
+        } else if (cut.after === runtime.meta.id) {
+          runtime.a = cut.y;
+        }
+      }
       const s = solved[runtime.meta.id];
       runtime.group.position.set(0, s.floorY ?? 0, 0);
       if (runtime.status === "ready" && runtime.module.layout) {
@@ -373,7 +403,7 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
      Frame
      -------------------------------------------------------------------------- */
 
-  const sample = new Float32Array(13);
+  const sample = new Float32Array(14);
   const tilt = new Quaternion();
   const axisY = new Vector3(0, 1, 0);
   const axisX = new Vector3(1, 0, 0);
@@ -487,6 +517,8 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
     shared.uTime.value = time;
     shared.uCamY.value = sample[1];
     shared.uFog.value.set(sample[10] * 0.16, sample[10]);
+    curtain.visible = sample[13] > 0.002;
+    curtain.material.uniforms.uDim.value = Math.min(1, sample[13]);
 
     applyGlobals();
 

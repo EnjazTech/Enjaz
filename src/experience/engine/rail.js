@@ -13,7 +13,8 @@
 
 const DEG = Math.PI / 180;
 const SAMPLES = 2048;
-const STRIDE = 13;
+const STRIDE = 14;
+const CUT_FADE = 0.14; // Screens over which the picture dips to dark each side of a cut.
 
 export const WORLD = {
   deskY: 0, // Top of the desk in Act I.
@@ -103,6 +104,77 @@ function offsetFromPose(bearing, elevation, d) {
   return [d * Math.cos(e) * Math.sin(b), -d * Math.sin(e), d * Math.cos(e) * Math.cos(b)];
 }
 
+/**
+ * Where the film cuts instead of travelling: half way between the copy before and
+ * the copy after, so the scene changes while one caption hands over to the next.
+ * A meta with cut stands between two shots; cutIn cuts on the way into its own.
+ */
+export function findCuts(layout, metas) {
+  const cuts = [];
+  metas.forEach((meta, index) => {
+    if ((!meta.cut && !meta.cutIn) || index === 0) {
+      return;
+    }
+    const before = metas[index - 1];
+    const after = metas[meta.cut ? index + 1 : index];
+    if (!after) {
+      return;
+    }
+    const from = layout.shots[before.id].pinEnd;
+    const to = layout.shots[after.id].pinStart;
+    cuts.push({ before: before.id, after: after.id, from, to, y: (from + to) / 2 });
+  });
+  return cuts;
+}
+
+/**
+ * Replaces the move across each cut with a hold either side of it. The picture is
+ * dark at the cut itself, so the change of scene is never seen as a jump.
+ */
+function cutKnots(knots, cuts, layout) {
+  const step = layout.docH / (SAMPLES - 1);
+  const dark = step * 1.5; // Wider than a table sample, so the cut always lands in the dark.
+  for (const cut of cuts) {
+    if (cut.to - cut.from < 1) {
+      continue;
+    }
+    let a = null;
+    let b = null;
+    for (const knot of knots) {
+      if (knot.y <= cut.from + 0.5) {
+        a = knot;
+      }
+      if (!b && knot.y >= cut.to - 0.5) {
+        b = knot;
+      }
+    }
+    if (!a || !b) {
+      continue;
+    }
+    for (let i = knots.length - 1; i >= 0; i -= 1) {
+      if (knots[i].y > cut.from + 0.5 && knots[i].y < cut.to - 0.5) {
+        knots.splice(i, 1);
+      }
+    }
+    const half = (cut.to - cut.from) / 2;
+    const fade = Math.min(CUT_FADE * layout.svh, half * 0.6);
+    const hold = (knot, y, dim, ease) => knots.push({ ...knot, y, dim, ease });
+    if (fade > dark * 2) {
+      hold(a, cut.y - fade, 0, "smooth");
+      hold(a, cut.y - dark, 1, "linear");
+      hold(a, cut.y - 0.01, 1, "linear");
+      hold(b, cut.y + 0.01, 1, "linear");
+      hold(b, cut.y + dark, 1, "smooth");
+      hold(b, cut.y + fade, 0, "linear");
+    } else {
+      hold(a, cut.y - 0.01, 0, "linear");
+      hold(b, cut.y + 0.01, 0, "linear");
+    }
+    /* The next cut looks its neighbours up by position. */
+    knots.sort((x, y) => x.y - y.y);
+  }
+}
+
 /** Solves floors and framing, then returns the knot list. */
 export function bakeKnots(layout, metas) {
   const { dir, portrait, H, W } = layout;
@@ -186,6 +258,7 @@ export function bakeKnots(layout, metas) {
       fog: pose.fog ?? 60,
       ox: extra.ox ?? s.ox,
       oy: extra.oy ?? s.oy,
+      dim: 0,
       ease: extra.ease ?? "trapezoid",
     });
   };
@@ -197,6 +270,13 @@ export function bakeKnots(layout, metas) {
     const next = list[i + 1];
     const from = prev ? prev.shot.pinEnd : 0;
     const to = next ? next.shot.pinStart : layout.docH;
+
+    if (meta.cut) {
+      /* No shot of its own: the stretch between its neighbours, with the cut in it. */
+      shot.pinStart = from;
+      shot.pinEnd = to;
+      continue;
+    }
 
     if (meta.authored) {
       /* Caption-less stretch: owns the whole interval between its neighbours. */
@@ -281,14 +361,17 @@ export function bakeKnots(layout, metas) {
 
   /* Knots must be strictly increasing for the table bake. */
   knots.sort((a, b) => a.y - b.y);
-  return { knots, solved };
+  const cuts = findCuts(layout, metas);
+  cutKnots(knots, cuts, layout);
+  return { knots, solved, cuts };
 }
 
 const smooth = (u) => u * u * (3 - 2 * u);
 
-/** Samples the knots into a flat table. */
-export function bakeTable(knots, docH) {
+/** Samples the knots into a flat table. cuts are the scroll positions the film jumps at. */
+export function bakeTable(knots, docH, cuts = []) {
   const table = new Float32Array(SAMPLES * STRIDE);
+  table.cuts = cuts;
   let segment = 0;
   const q = [0, 0, 0, 1];
 
@@ -328,6 +411,7 @@ export function bakeTable(knots, docH) {
     table[at + 10] = lerp(a.fog, b.fog, u);
     table[at + 11] = lerp(a.ox, b.ox, u);
     table[at + 12] = lerp(a.oy, b.oy, u);
+    table[at + 13] = lerp(a.dim ?? 0, b.dim ?? 0, u);
   }
   return table;
 }
@@ -336,7 +420,17 @@ export function bakeTable(knots, docH) {
 export function sampleTable(table, docH, y, out) {
   const f = clamp01(y / docH) * (SAMPLES - 1);
   const i = Math.min(SAMPLES - 2, Math.floor(f));
-  const u = f - i;
+  let u = f - i;
+  /* Never blend across a cut: each side keeps its own framing right up to it. */
+  const cuts = table.cuts;
+  if (cuts && cuts.length) {
+    const step = docH / (SAMPLES - 1);
+    for (let c = 0; c < cuts.length; c += 1) {
+      if (cuts[c] > i * step && cuts[c] <= (i + 1) * step) {
+        u = y < cuts[c] ? 0 : 1;
+      }
+    }
+  }
   const a = i * STRIDE;
   const b = a + STRIDE;
   for (let c = 0; c < STRIDE; c += 1) {

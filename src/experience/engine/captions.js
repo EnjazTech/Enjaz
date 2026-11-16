@@ -21,11 +21,6 @@ const BLUR = 0.28; // em.
 const STAGGER = 0.14;
 const SCRIM_FIRST = 0.55; // The scrim is there before the words are.
 const REST_AFTER = 0.25; // Seconds of stillness before a stopped caption finishes appearing.
-/* The hero hands over to the paper strip, which has words of its own, so it must be
-   gone by the time the strip fills the frame: the drop's first knot (shots/metas.js). */
-const HERO_OUT = 0.18;
-const HERO_MIN = 0.6; // Of a ZONE: the shortest the hero takes to leave.
-const HERO_BACK = 0.3; // Stopped this little way into leaving, the hero comes back; past it, it goes.
 
 const clamp01 = (value) => Math.min(1, Math.max(0, value));
 
@@ -81,7 +76,7 @@ export function createCaptions({ inPlace, blur }) {
   }
 
   return {
-    bake(layout) {
+    bake(layout, cuts = []) {
       const zone = ZONE * layout.svh;
       items = [];
       for (const [id, shot] of Object.entries(layout.shots)) {
@@ -99,8 +94,6 @@ export function createCaptions({ inPlace, blur }) {
             s: id === "hero" ? -1 : shot.pinStart,
             e: shot.pinEnd,
             b: shot.pinEnd + zone,
-            unpin: shot.pinEnd,
-            hero: id === "hero",
             pin: shot.pin ?? 0,
             shown: -1,
             shift: 0,
@@ -125,10 +118,12 @@ export function createCaptions({ inPlace, blur }) {
         } else {
           before.b = before.e + Math.min(most, Math.max(zone, stretch - after.pin));
         }
-        /* The hero leaves before the strip arrives, starting while still pinned if it must. */
-        if (before.hero) {
-          before.b = before.unpin + stretch * HERO_OUT;
-          before.e = Math.min(before.unpin, before.b - zone * HERO_MIN);
+        /* Across a cut, each caption stays with its own scene. */
+        for (const cut of cuts) {
+          if (cut > before.e && cut < after.s) {
+            before.b = Math.min(before.b, cut);
+            after.a = Math.max(after.a, cut);
+          }
         }
       }
       lastPos = NaN;
@@ -143,17 +138,11 @@ export function createCaptions({ inPlace, blur }) {
         const arriving = item.s > item.a ? clamp01((pos - item.a) / (item.s - item.a)) : 1;
         const leaving = clamp01((pos - item.e) / (item.b - item.e));
         const near = pos > item.a && pos < item.b;
-        let shown = near ? Math.max(Math.min(arriving, 1 - leaving), rest) : 0;
-        /* A stop part way out of the hero finishes whichever way it is nearer, so it is
-           never brought back over the strip's own words. */
-        if (item.hero && near && leaving > HERO_BACK) {
-          shown = Math.min(1 - leaving, 1 - rest);
-        }
+        const shown = near ? Math.max(Math.min(arriving, 1 - leaving), rest) : 0;
 
         let shift = 0;
         if (inPlace && near) {
-          /* Only cancels real travel: a caption still pinned is not moving. */
-          shift = arriving < 1 ? (pos - item.s) * IN_PLACE : leaving > 0 ? Math.max(0, pos - item.unpin) * IN_PLACE : 0;
+          shift = arriving < 1 ? (pos - item.s) * IN_PLACE : leaving > 0 ? (pos - item.e) * IN_PLACE : 0;
         }
         if (shown !== item.shown || shift !== item.shift) {
           item.shown = shown;

@@ -28,23 +28,8 @@ export const METAS = [
     set: "desk",
     idleHz: 0,
     budget: { draws: 12, tris: { L: 30000, M: 80000, H: 200000 } },
-    /* Follow the paper off the desk and down through the hole in the floor. */
-    authored(solved, layout) {
-      const aspect = layout.W / layout.H;
-      const lens = layout.portrait ? 20 : 15.6;
-      const tan = Math.tan((lens * Math.PI) / 360);
-      /* Frame the 24 cm strip: nearly full width on a phone, a column on desktop. */
-      const fraction = layout.portrait ? 0.92 : 0.36;
-      const d = 0.24 / fraction / (2 * tan * aspect);
-      const y = WORLD.floorY;
-      return [
-        { t: 0.18, position: [0, -0.03, d], elevation: -1, lens: 20, clip: [0.1, 30], fog: 26 },
-        { t: 0.48, position: [0, y * 0.72, d * 0.96], elevation: -2, lens: 20, clip: [0.1, 30], fog: 26 },
-        { t: 0.64, position: [0, 0.28, 0.5], elevation: -84, lens: 36, clip: [0.05, 20], fog: 20 },
-        { t: 0.84, position: [0, y - 0.25, 0.1], elevation: -90, lens: 40, clip: [0.04, 20], fog: 16 },
-        { t: 0.93, position: [0, WORLD.slabBottom + 0.1, 0.5], elevation: -90, lens: 24, clip: [0.05, 60], fog: 40 },
-      ];
-    },
+    /* Straight from the desk to the archive: no trip down the strip. */
+    cut: true,
   },
   {
     id: "svc.head",
@@ -128,6 +113,8 @@ export const METAS = [
     pose: { lens: 50, elevation: -90, shift: [0, 0, 1.1], clip: [0.05, 90], fog: 70 },
     budget: { draws: 10, tris: { L: 26000, M: 70000, H: 160000 } },
     idleHz: 0,
+    /* Services end and the process begins: a cut, not a flight down the shaft. */
+    cutIn: true,
     /* Threads the gap in the word, alongside the line. Never looks back up. */
     exitKnots(solved, layout, self) {
       const y = self.floorY;
@@ -183,17 +170,8 @@ export const METAS = [
     set: "none",
     idleHz: 0,
     budget: { draws: 4, tris: { L: 3000, M: 6000, H: 12000 } },
-    /* The fastest stretch of the film, and the cheapest frames. */
-    authored(solved) {
-      const ship = solved["step.ship"];
-      const q = solved["why.q"];
-      const top = ship.floorY - 2;
-      const ceiling = q.floorY + q.d + 1.6;
-      return [
-        { t: 0.2, position: [0.2, top, 0.2], elevation: -90, lens: 70, clip: [0.05, 60], fog: 44 },
-        { t: 0.86, position: [0.05, ceiling + 1.2, 0.06], elevation: -90, lens: 70, clip: [0.05, 40], fog: 34 },
-      ];
-    },
+    /* Straight from the last step to the desk: no fall. */
+    cut: true,
   },
   {
     id: "why.q",
@@ -268,9 +246,12 @@ export const METAS = [
   },
 ];
 
+/* A cut has nothing of its own to build. */
+const nothing = async () => ({ default: { *build() {}, update() {} } });
+
 export const LOADERS = {
   hero: () => import("./hero.js"),
-  drop: () => import("./drop.js"),
+  drop: nothing,
   "svc.head": () => import("./svc-head.js"),
   "svc.web": () => import("./svc-web.js"),
   "svc.apps": () => import("./svc-apps.js"),
@@ -283,7 +264,7 @@ export const LOADERS = {
   "step.scope": () => import("./step-scope.js"),
   "step.build": () => import("./step-build.js"),
   "step.ship": () => import("./step-ship.js"),
-  fall: () => import("./fall.js"),
+  fall: nothing,
   "why.q": () => import("./why-q.js"),
   "why.list": () => import("./why-list.js"),
   "why.stats": () => import("./why-stats.js"),
