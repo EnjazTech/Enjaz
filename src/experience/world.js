@@ -41,6 +41,9 @@ const CLEAR = 0x07080c;
 const IDLE_STOP_MS = 12000;
 const DIP_MS = 190; // Long enough for the overlay in main.css to reach black.
 const DIP_REST_MS = 900;
+const SETTLE_AFTER = 0.35; // Seconds the page must be still before it glides to the nearest copy.
+const SETTLE_EASE = 5; // Per second.
+const SETTLE_CRUISE = 2; // Screens a second at most.
 
 const nextTask = () =>
   new Promise((done) => {
@@ -398,6 +401,12 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
   let smoothY = 0;
   let cadence = 0;
   let contextLost = false;
+  /* Stopped where there is nothing to read: the page glides on to the nearest copy. */
+  let settle = null; // { at, to, written }
+  let still = 0;
+  let lastNative = NaN;
+  let checked = false;
+  let touching = false;
 
   function fillP(runtime, dt) {
     const clamp = (value) => Math.min(1, Math.max(0, value));
@@ -579,7 +588,39 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
     time += dt;
 
     const native = window.scrollY;
-    const target = wheelPage.step(native, dt, layout.svh, now);
+    let target = wheelPage.step(native, dt, layout.svh, now);
+    if (settle) {
+      if (touching || wheelPage.on || Math.abs(native - settle.written) > 2) {
+        settle = null; // Anyone moving the page takes it back.
+      } else {
+        const eased = settle.at + (settle.to - settle.at) * (1 - Math.exp(-SETTLE_EASE * dt));
+        const limit = SETTLE_CRUISE * layout.svh * dt;
+        settle.at += Math.max(-limit, Math.min(limit, eased - settle.at));
+        if (Math.abs(settle.to - settle.at) < 0.5) {
+          settle.at = settle.to;
+        }
+        target = Math.round(settle.at);
+        settle.written = target;
+        if (settle.at === settle.to) {
+          settle = null;
+        }
+      }
+    } else if (!wheelPage.on && !touching && !dipStart && !document.body.classList.contains("is-nav-open")) {
+      if (native !== lastNative) {
+        still = 0;
+        checked = false;
+      } else {
+        still += dt;
+      }
+      if (!checked && still > SETTLE_AFTER) {
+        checked = true;
+        const to = captions.settle(native);
+        if (to !== null && Math.abs(to - native) > 2) {
+          settle = { at: native, to, written: native };
+        }
+      }
+    }
+    lastNative = target;
     if (target !== native) {
       window.scrollTo({ top: target, behavior: "instant" });
     }
@@ -638,6 +679,7 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
   /* Whatever was under way, the page is the browser's again. */
   function letGo() {
     wheelPage.on = false;
+    settle = null;
     dipStart = 0;
     root.classList.remove("world-dip");
   }
@@ -651,6 +693,15 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
   /* --------------------------------------------------------------------------
      Input: never blocks scrolling or selection
      -------------------------------------------------------------------------- */
+
+  window.addEventListener("touchstart", () => {
+    touching = true;
+  }, { passive: true });
+  const lift = () => {
+    touching = false;
+  };
+  window.addEventListener("touchend", lift, { passive: true });
+  window.addEventListener("touchcancel", lift, { passive: true });
 
   window.addEventListener(
     "pointermove",
@@ -841,6 +892,9 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
       letGo();
       follower.reset(window.scrollY);
       y = follower.y;
+      /* A seek is a test asking for exactly this y: never glide away from it. */
+      lastNative = window.scrollY;
+      checked = true;
       captions.update(y, 0);
       draw(0.016);
       return y;

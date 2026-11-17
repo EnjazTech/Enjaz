@@ -26,11 +26,16 @@ const REST_AFTER = 0.25; // Seconds of stillness before a stopped caption finish
 const HERO_OUT = 0.18;
 const HERO_MIN = 0.6; // Of a ZONE: the shortest the hero takes to leave.
 const HERO_BACK = 0.3; // Stopped this little way into leaving, the hero comes back; past it, it goes.
+/* Where the strip fills the frame with words of its own: the drop's knots at 0.18 and
+   0.48 (shots/metas.js), kept clear of the camera's ease either side. */
+const STRIP = [0.24, 0.45];
 
 const clamp01 = (value) => Math.min(1, Math.max(0, value));
 
 export function createCaptions({ inPlace, blur }) {
   let items = [];
+  let strip = null;
+  let bottom = Infinity;
   let lastPos = NaN;
   let still = 0;
   let rest = 0;
@@ -102,6 +107,7 @@ export function createCaptions({ inPlace, blur }) {
             unpin: shot.pinEnd,
             hero: id === "hero",
             pin: shot.pin ?? 0,
+            h: shot.caption.h,
             shown: -1,
             shift: 0,
             gone: false,
@@ -111,6 +117,8 @@ export function createCaptions({ inPlace, blur }) {
       /* Neighbours share the stretch between them. In place they meet in the middle.
          Scrolling, the next one is fully in view its pin short of where it stops. */
       const most = ZONE_MAX * layout.svh;
+      strip = null;
+      bottom = layout.docH - layout.svh;
       for (let i = 1; i < items.length; i += 1) {
         const before = items[i - 1];
         const after = items[i];
@@ -129,6 +137,7 @@ export function createCaptions({ inPlace, blur }) {
         if (before.hero) {
           before.b = before.unpin + stretch * HERO_OUT;
           before.e = Math.min(before.unpin, before.b - zone * HERO_MIN);
+          strip = STRIP.map((t) => before.unpin + stretch * t);
         }
       }
       lastPos = NaN;
@@ -161,6 +170,49 @@ export function createCaptions({ inPlace, blur }) {
           write(item, shown, shift, leaving > 0);
         }
       }
+    },
+
+    /**
+     * Where to go when the page has stopped at pos with nothing to read: the nearest
+     * place a caption is fully shown, or the strip's own words. null when there is copy.
+     */
+    settle(pos) {
+      if (!items.length || pos >= bottom - 2) {
+        return null; // The footer is copy too.
+      }
+      if (strip && pos >= strip[0] && pos <= strip[1]) {
+        return null;
+      }
+      let best = null;
+      let distance = Infinity;
+      const consider = (from, to) => {
+        const at = Math.min(to, Math.max(from, pos));
+        if (Math.abs(at - pos) < distance) {
+          distance = Math.abs(at - pos);
+          best = at;
+        }
+      };
+      for (const item of items) {
+        if (item.hero) {
+          const out = item.e + (item.b - item.e) * HERO_BACK;
+          if (pos < out) {
+            return null;
+          }
+          consider(0, item.e);
+          continue;
+        }
+        /* A stopped caption finishes appearing in place; one that scrolls must also be
+           mostly on screen. */
+        const shownFrom = inPlace ? item.a : item.s - item.h * 0.5;
+        if (pos > shownFrom && pos < item.b) {
+          return null;
+        }
+        consider(item.s, item.e);
+      }
+      if (strip) {
+        consider(strip[0], strip[1]);
+      }
+      return best === null ? null : Math.round(best);
     },
 
     /** Gives every caption back as written. */
