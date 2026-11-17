@@ -1152,6 +1152,11 @@ a.lang__opt:focus-visible {
 }
 
 @media (max-width: 30rem) {
+  /* Narrow phones: the tagline must not run under the language switch. */
+  .brand__tagline {
+    letter-spacing: 0.12em;
+  }
+
   .hero__actions .btn {
     flex: 1 1 100%;
   }
@@ -1162,6 +1167,13 @@ a.lang__opt:focus-visible {
 
   .card {
     padding: 1.5rem;
+  }
+}
+
+/* The smallest phones: the name alone, so the bar never crowds the switch. */
+@media (max-width: 22rem) {
+  .brand__tagline {
+    display: none;
   }
 }
 
