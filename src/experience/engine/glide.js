@@ -27,8 +27,8 @@ export const BRAKE = 0.45; // Screens over which the wheel slows into a caption,
 export const DETENT_REST = 0.35; // Seconds a caption always holds the wheel once the page stops on it.
 export const DETENT_MAX = 1.2; // Seconds it may hold a push that keeps coming, like a trackpad's coast.
 export const DETENT_PAUSE = 0.14; // Seconds without wheel input that end a push.
-export const TOUR_SECONDS = 40; // The tour, top to footer, stops included.
-export const TOUR_READ = 0.55; // The share of it spent stopped on copy. The rest is scrolling.
+export const TOUR_SECONDS = 55; // The tour, top to footer, stops included.
+export const TOUR_READ = 0.65; // The share of it spent stopped on copy. The rest is scrolling.
 export const TOUR_WORDS = 12; // Added to every stop's word count, so a short heading still gets a moment.
 export const TOUR_START = 0.6; // Seconds before it moves off copy the visitor is already looking at.
 export const TOUR_WAIT = 4; // Seconds it may wait at a stop for the next scene to finish building.
@@ -64,9 +64,13 @@ export function createPacer() {
         const y = i * step;
         let distance = Infinity;
         for (const [from, to] of zones) {
-          distance = Math.min(distance, y < from ? from - y : y > to ? y - to : 0);
+          distance = Math.min(
+            distance,
+            y < from ? from - y : y > to ? y - to : 0,
+          );
         }
-        speeds[i] = 1 + (EMPTY_SPEED - 1) * smoothstep(Math.min(1, distance / brake));
+        speeds[i] =
+          1 + (EMPTY_SPEED - 1) * smoothstep(Math.min(1, distance / brake));
         if (i > 0) {
           effort[i] = effort[i - 1] + (step * 2) / (speeds[i - 1] + speeds[i]);
         }
@@ -157,11 +161,17 @@ export function createTour(pacer = createPacer()) {
         return;
       }
       const read = seconds * TOUR_READ;
-      const weight = stops.slice(0, -1).reduce((sum, stop) => sum + stop.words + TOUR_WORDS, 0);
+      const weight = stops
+        .slice(0, -1)
+        .reduce((sum, stop) => sum + stop.words + TOUR_WORDS, 0);
       stops.forEach((stop, index) => {
-        stop.read = index < stops.length - 1 ? (read * (stop.words + TOUR_WORDS)) / weight : 0;
+        stop.read =
+          index < stops.length - 1
+            ? (read * (stop.words + TOUR_WORDS)) / weight
+            : 0;
       });
-      const effort = pacer.toEffort(stops.at(-1).y) - pacer.toEffort(stops[0].y);
+      const effort =
+        pacer.toEffort(stops.at(-1).y) - pacer.toEffort(stops[0].y);
       perEffort = effort > 0 ? (seconds - read) / effort : 0;
     },
     /** Starts from y. fresh: nobody has had time to read the copy there yet. At the end it starts again from the top. */
@@ -178,10 +188,13 @@ export function createTour(pacer = createPacer()) {
         y = stops[0].y;
         fresh = true;
       }
-      const here = next > 0 && y - stops[next - 1].y <= 2 ? stops[next - 1] : null;
+      const here =
+        next > 0 && y - stops[next - 1].y <= 2 ? stops[next - 1] : null;
       if (here) {
         at = here.y;
-        length = fresh ? here.read + TOUR_START : Math.min(TOUR_START, here.read);
+        length = fresh
+          ? here.read + TOUR_START
+          : Math.min(TOUR_START, here.read);
       } else {
         at = y;
         length = TOUR_START;
@@ -197,7 +210,10 @@ export function createTour(pacer = createPacer()) {
       }
       clock += dt;
       if (phase === "hold") {
-        if (clock < length || (clock < length + TOUR_WAIT && !ready(at, stops[next].y))) {
+        if (
+          clock < length ||
+          (clock < length + TOUR_WAIT && !ready(at, stops[next].y))
+        ) {
           return at;
         }
         from = pacer.toEffort(at);
@@ -234,7 +250,8 @@ export function createFollower(start = 0) {
       const omega = 2 / SMOOTH_TIME;
       const x = omega * dt;
       const decay = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
-      const reach = FILM_CRUISE * Math.min(boost, EMPTY_CRUISE) * screen * SMOOTH_TIME;
+      const reach =
+        FILM_CRUISE * Math.min(boost, EMPTY_CRUISE) * screen * SMOOTH_TIME;
       const change = clamp(this.y - target, -reach, reach);
       const temp = (this.v + omega * change) * dt;
       this.v = (this.v - omega * temp) * decay;
@@ -283,9 +300,16 @@ export function createWheelPage(pacer = createPacer()) {
       /* Just stopped on a caption: the rest of the same push is spent there. A new
          push, after a pause, carries on. */
       const rest = this.rest;
-      if (rest && Math.sign(delta) === rest.dir && Math.abs(this.at - rest.y) < 2) {
+      if (
+        rest &&
+        Math.sign(delta) === rest.dir &&
+        Math.abs(this.at - rest.y) < 2
+      ) {
         const held = now - rest.since;
-        if (held < DETENT_REST * 1000 || (held < DETENT_MAX * 1000 && now - rest.last < DETENT_PAUSE * 1000)) {
+        if (
+          held < DETENT_REST * 1000 ||
+          (held < DETENT_MAX * 1000 && now - rest.last < DETENT_PAUSE * 1000)
+        ) {
           rest.last = now;
           this.aim = this.at;
           return;
@@ -320,8 +344,14 @@ export function createWheelPage(pacer = createPacer()) {
         return native;
       }
       const at = pacer.toEffort(this.at);
-      const eased = pacer.fromEffort(at + (pacer.toEffort(this.aim) - at) * (1 - Math.exp(-WHEEL_EASE * dt)));
-      const limit = PAGE_CRUISE * Math.min(pacer.speed(this.at), EMPTY_CRUISE) * screen * dt;
+      const eased = pacer.fromEffort(
+        at + (pacer.toEffort(this.aim) - at) * (1 - Math.exp(-WHEEL_EASE * dt)),
+      );
+      const limit =
+        PAGE_CRUISE *
+        Math.min(pacer.speed(this.at), EMPTY_CRUISE) *
+        screen *
+        dt;
       this.at += clamp(eased - this.at, -limit, limit);
       if (Math.abs(this.aim - this.at) < 0.5) {
         const dir = Math.sign(this.aim - this.written);
