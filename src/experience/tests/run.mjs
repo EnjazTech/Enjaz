@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { lampOn, launch, mainFixture, REPO, RESULTS, until, VIEWPORTS, watch } from "./helpers.mjs";
 import { serve } from "./server.mjs";
-import { createFollower, createPacer, createWheelPage, DETENT_MAX, DETENT_REST, DIP_LEAD, EMPTY_CRUISE, EMPTY_SPEED, FILM_CRUISE, PAGE_CRUISE, WHEEL_EVENT, WHEEL_QUEUE } from "../engine/glide.js";
+import { createFollower, createPacer, createTour, createWheelPage, DETENT_MAX, DETENT_REST, DIP_LEAD, EMPTY_CRUISE, EMPTY_SPEED, FILM_CRUISE, PAGE_CRUISE, TOUR_READ, TOUR_SECONDS, TOUR_START, WHEEL_EVENT, WHEEL_QUEUE } from "../engine/glide.js";
 import { Governor, LADDER } from "../engine/governor.js";
 import { bakeTable, freeRect, sampleTable, trapezoid } from "../engine/rail.js";
 import { classify, QUALITY } from "../engine/tiers.js";
@@ -1584,6 +1584,146 @@ await check("E27", "on a phone, touch stays native and the dock covers for a fad
   assert(swipe.y === swipe.top, `film at ${swipe.y}, page at ${swipe.top}`);
   assert(swipe.behind, "the film never eased behind the page");
   await context.close();
+});
+
+await check("E29", "the tour is off until asked for, stops on every caption, and gives way to any input", async () => {
+  /* The plan, in plain Node: top to the last stop in TOUR_SECONDS, each stop held for its words. */
+  const screen = 900;
+  const pacer = createPacer();
+  pacer.bake({ zones: [[0, 900], [3000, 4000], [8000, 9000]], down: [3000, 8000], up: [900, 4000, 9000] }, 12000, screen);
+  const plan = createTour(pacer);
+  plan.plan([{ y: 8000, words: 20 }, { y: 0, words: 30 }, { y: 3000, words: 10 }, { y: 11000, words: 0 }]);
+  const reads = plan.stops.map((stop) => stop.read);
+  assert(plan.stops.map((stop) => stop.y).join() === "0,3000,8000,11000", `stops ${plan.stops.map((stop) => stop.y)}`);
+  assert(Math.abs(reads.reduce((sum, read) => sum + read, 0) - TOUR_SECONDS * TOUR_READ) < 0.01, `reading time ${reads}`);
+  assert(reads[0] > reads[2] && reads[2] > reads[1] && reads[3] === 0, `reading time does not follow the words: ${reads}`);
+  plan.start(0, true);
+  let clock = 0;
+  let at = 0;
+  const held = new Map();
+  while (plan.playing && clock < 120) {
+    const next = plan.step(1 / 60);
+    if (next === at) {
+      held.set(at, (held.get(at) ?? 0) + 1 / 60);
+    }
+    at = next;
+    clock += 1 / 60;
+  }
+  assert(at === 11000, `ended at ${at}`);
+  assert(Math.abs(clock - (TOUR_SECONDS + TOUR_START)) < 0.3, `took ${clock.toFixed(2)} s from the top`);
+  for (const stop of plan.stops.slice(0, -1)) {
+    const time = held.get(stop.y) ?? 0;
+    assert(time >= stop.read - 0.05, `held ${stop.y} for ${time.toFixed(2)} s, against ${stop.read.toFixed(2)}`);
+  }
+  /* Started on a stop it moves off after a beat; between stops it heads for the next; at the end it starts again. */
+  plan.start(3000);
+  let waited = 0;
+  while (plan.step(1 / 60) === 3000 && waited < 5) {
+    waited += 1 / 60;
+  }
+  assert(waited <= TOUR_START + 0.1, `waited ${waited.toFixed(2)} s on the stop it started on`);
+  plan.start(5000);
+  let first = null;
+  for (let i = 0, last = 5000; i < 2000 && first === null; i += 1) {
+    const next = plan.step(1 / 60);
+    first = next === last && next !== 5000 ? next : null;
+    last = next;
+  }
+  assert(first === 8000, `from between stops it stopped first at ${first}`);
+  plan.start(11000);
+  assert(plan.playing && plan.step(1 / 60) === 0, "at the end it did not start again from the top");
+
+  /* In the page. */
+  const { context, page, problems } = await film("/en/?tier=L", { width: 1440, height: 900 });
+  await page.evaluate(pageHelpers);
+  const button = () =>
+    page.evaluate(() => {
+      const element = document.querySelector(".tour");
+      return element && { state: element.dataset.state, text: element.textContent, playing: window.__enjazWorld.tour.playing, top: scrollY };
+    });
+  let state = await button();
+  assert(state && state.state === "play" && state.text === "Auto tour" && !state.playing, `at open: ${JSON.stringify(state)}`);
+  await page.waitForTimeout(1500);
+  assert((await button()).top === 0, "the page moved by itself");
+
+  await page.click(".tour");
+  state = await button();
+  assert(state.playing && state.state === "pause" && state.text === "Pause tour", `after play: ${JSON.stringify(state)}`);
+  const stops = await page.evaluate(() => window.__enjazWorld.tour.stops.map((stop) => stop.y));
+  const captions = await page.evaluate(() => Object.entries(window.__enjazWorld.layout.shots).filter(([id, shot]) => shot.caption && id !== "hero").map(([, shot]) => Math.round(shot.pinStart)));
+  assert(captions.every((y) => stops.includes(y)), `captions missing from the tour: ${captions.filter((y) => !stops.includes(y))}`);
+  assert(stops.at(-1) === captions.at(-1), `the tour ends at ${stops.at(-1)}, not on the last caption at ${captions.at(-1)}`);
+  /* Watch it past the strip and the first two captions. */
+  await until(page, (y) => scrollY > y, { arg: stops[3] + 2, timeout: 90000, every: 200 });
+  const trace = await page.evaluate(() => window.__trace.slice());
+  const svh = 900;
+  for (const y of stops.slice(1, 4)) {
+    const frames = trace.filter((row) => row[1] === y);
+    const span = frames.length ? (frames.at(-1)[0] - frames[0][0]) / 1000 : 0;
+    assert(span > 0.3, `held ${y} for ${span.toFixed(2)} s`);
+  }
+  let peak = 0;
+  for (let i = 5; i < trace.length; i += 1) {
+    peak = Math.max(peak, Math.abs(trace[i][1] - trace[i - 5][1]) / ((trace[i][0] - trace[i - 5][0]) / 1000) / svh);
+  }
+  assert(peak <= PAGE_CRUISE * EMPTY_CRUISE, `ran at ${peak.toFixed(2)} screens/s`);
+
+  /* The wheel, a key, a press anywhere else: each one stops it. */
+  await page.mouse.move(720, 450);
+  await page.mouse.wheel(0, 120);
+  state = await button();
+  assert(!state.playing && state.state === "play", `the wheel did not stop it: ${JSON.stringify(state)}`);
+  await page.click(".tour");
+  await page.keyboard.press("ArrowDown");
+  assert(!(await button()).playing, "a key did not stop it");
+  await page.click(".tour");
+  await page.mouse.click(700, 300);
+  assert(!(await button()).playing, "a click on the page did not stop it");
+  /* Enter on the button is the button's. */
+  await page.focus(".tour");
+  await page.keyboard.press("Enter");
+  assert((await button()).playing, "Enter did not start it");
+  await page.keyboard.press("Enter");
+  assert(!(await button()).playing, "Enter did not pause it");
+
+  /* It ends on the call to action, offers a replay, and the replay starts at the top. */
+  await page.evaluate((y) => {
+    window.__enjazWorld.seek(y);
+    window.__enjazWorld.tour.play();
+  }, stops.at(-2));
+  await until(page, () => !window.__enjazWorld.tour.playing, { timeout: 60000 });
+  state = await button();
+  assert(state.top === stops.at(-1) && state.state === "replay" && state.text === "Replay tour", `at the end: ${JSON.stringify(state)}`);
+  await page.click(".tour");
+  await until(page, () => scrollY === 0 && window.__enjazWorld.tour.playing, { timeout: 5000 });
+  assert(problems.length === 0, problems.join("; "));
+  await context.close();
+
+  /* ?tour=1 plays from the open, holding the hero first. On a phone, a tap on the button
+     pauses without starting again, and the open menu stops it. */
+  const phone = await film("/?tour=1&tier=L", { width: 390, height: 844, hasTouch: true, isMobile: true, locale: "ar" });
+  state = await phone.page.evaluate(() => ({ playing: window.__enjazWorld.tour.playing, top: scrollY, text: document.querySelector(".tour").textContent }));
+  assert(state.playing && state.top === 0 && state.text === "إيقاف الجولة", `?tour=1: ${JSON.stringify(state)}`);
+  await phone.page.tap(".tour");
+  await phone.page.waitForTimeout(300);
+  assert(!(await phone.page.evaluate(() => window.__enjazWorld.tour.playing)), "a tap on the button did not pause it");
+  await phone.page.tap(".tour");
+  assert(await phone.page.evaluate(() => window.__enjazWorld.tour.playing), "a second tap did not start it");
+  await phone.page.tap("[data-nav-toggle]");
+  await phone.page.waitForTimeout(300);
+  state = await phone.page.evaluate(() => ({ playing: window.__enjazWorld.tour.playing, hidden: getComputedStyle(document.querySelector(".tour")).visibility }));
+  assert(!state.playing && state.hidden === "hidden", `with the menu open: ${JSON.stringify(state)}`);
+  await phone.context.close();
+
+  /* Reduced motion gets stills, and no tour. */
+  const still = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+  const stillPage = await still.newPage();
+  await stillPage.goto(`${site.url}/en/?tour=1`);
+  await stillPage.waitForLoadState("load");
+  await stillPage.waitForTimeout(800);
+  assert(!(await stillPage.evaluate(() => document.querySelector(".tour"))), "stills have a tour button");
+  await still.close();
+  return `${stops.length} stops`;
 });
 
 await check("E19", "the 404 page loads no scripts, one image, and shows its copy", async () => {

@@ -215,6 +215,11 @@ export function createCaptions({ inPlace, blur }) {
       return best === null ? null : Math.round(best);
     },
 
+    /** Where the strip fills the frame with its own words, as [from, to], or null. */
+    stripWords() {
+      return strip;
+    },
+
     /** Gives every caption back as written. */
     release() {
       for (const item of items) {

@@ -25,7 +25,7 @@ import {
 import { createCaptions, ZONE } from "./engine/captions.js";
 import { Governor } from "./engine/governor.js";
 import { seeded } from "./engine/geo.js";
-import { createFollower, createPacer, createWheelPage, DIP_LAG } from "./engine/glide.js";
+import { createFollower, createPacer, createTour, createWheelPage, DIP_LAG, TOUR_SECONDS } from "./engine/glide.js";
 import { bakeLayout, watchLayout } from "./engine/layout.js";
 import { bakeKnots, bakeTable, sampleTable, WORLD } from "./engine/rail.js";
 import { createText, waitForFonts } from "./engine/text.js";
@@ -155,6 +155,9 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
   const pad = () => layout.svh * 0.15;
   const captions = createCaptions({ inPlace: !coarse, blur: !coarse && tier !== "L" });
   const pacer = createPacer();
+  const tour = createTour(pacer);
+  let tourSeconds = TOUR_SECONDS;
+  let tourWritten = 0;
 
   /* Copy is showing from the moment a caption starts to swap in until it starts to
      leave. The wheel stops where it is fully shown: its pin start going down, its
@@ -178,11 +181,39 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
     return { zones, down, up };
   }
 
+  /* The tour stops where each caption is fully shown, as the wheel does, and on the
+     strip's own words. Each stop is held for as long as its words take to read. It
+     ends on the last caption, the call to action, rather than leave it for the footer. */
+  function planTour() {
+    const stops = [];
+    for (const [id, shot] of Object.entries(layout.shots)) {
+      const copy = shot.caption && document.querySelector(`[data-shot="${id}"] > .shot`);
+      if (copy) {
+        const words = [...copy.children]
+          .filter((kid) => kid.getAttribute("aria-hidden") !== "true")
+          .reduce((sum, kid) => sum + kid.textContent.trim().split(/\s+/).filter(Boolean).length, 0);
+        stops.push({ y: id === "hero" ? 0 : shot.pinStart, words });
+      }
+    }
+    const strip = captions.stripWords();
+    if (strip) {
+      stops.push({ y: (strip[0] + strip[1]) / 2, words: 0 });
+    }
+    const playing = tour.playing;
+    tour.plan(stops, tourSeconds);
+    /* Rebaked part way: carry on from here, against the new layout. */
+    if (playing) {
+      tour.start(window.scrollY);
+      tourWritten = Math.round(window.scrollY);
+    }
+  }
+
   function bake() {
     captions.release();
     layout = bakeLayout();
     captions.bake(layout);
     pacer.bake(paceZones(layout), layout.docH, layout.svh);
+    planTour();
     const baked = bakeKnots(layout, METAS);
     solved = baked.solved;
     docH = layout.docH;
@@ -589,7 +620,25 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
 
     const native = window.scrollY;
     let target = wheelPage.step(native, dt, layout.svh, now);
-    if (settle) {
+    if (tourEnded && Math.abs(native - tourWritten) > 2) {
+      tourEnded = false;
+      showTour();
+    }
+    if (tour.playing) {
+      if (touching || wheelPage.on || Math.abs(native - tourWritten) > 2 || document.body.classList.contains("is-nav-open")) {
+        pauseTour(); // Anyone moving the page takes it back.
+      } else {
+        const max = document.documentElement.scrollHeight - window.innerHeight;
+        target = Math.round(Math.min(max, tour.step(dt, built)));
+        tourWritten = target;
+        const end = tour.stops[tour.stops.length - 1].y;
+        tourButton.style.setProperty("--tour", (end > 0 ? Math.min(1, target / end) : 1).toFixed(3));
+        if (!tour.playing) {
+          tourEnded = true;
+          showTour();
+        }
+      }
+    } else if (settle) {
       if (touching || wheelPage.on || Math.abs(native - settle.written) > 2) {
         settle = null; // Anyone moving the page takes it back.
       } else {
@@ -678,6 +727,7 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
 
   /* Whatever was under way, the page is the browser's again. */
   function letGo() {
+    pauseTour();
     wheelPage.on = false;
     settle = null;
     dipStart = 0;
@@ -688,14 +738,105 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
     stopped = true;
     letGo();
     captions.release();
+    tourButton.remove();
   }
+
+  /* --------------------------------------------------------------------------
+     The tour: off until asked for, by the button or ?tour=1
+     -------------------------------------------------------------------------- */
+
+  /* Added at lamp-on, so the plain page and the stills never have it. */
+  const tourButton = document.createElement("button");
+  tourButton.type = "button";
+  tourButton.className = "tour";
+  const tourIcon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  tourIcon.setAttribute("viewBox", "0 0 24 24");
+  tourIcon.setAttribute("width", "18");
+  tourIcon.setAttribute("height", "18");
+  tourIcon.setAttribute("aria-hidden", "true");
+  tourIcon.setAttribute("focusable", "false");
+  const tourPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  tourIcon.append(tourPath);
+  const tourLabel = document.createElement("span");
+  tourButton.append(tourIcon, tourLabel);
+  const TOUR_LABELS =
+    root.lang === "ar"
+      ? { play: "جولة تلقائية", pause: "إيقاف الجولة", replay: "أعد الجولة" }
+      : { play: "Auto tour", pause: "Pause tour", replay: "Replay tour" };
+  /* Media icons keep their direction in Arabic: play points the way the tape runs. */
+  const TOUR_ICONS = {
+    play: "M8 5.2v13.6L18.8 12z",
+    pause: "M7 5h3.6v14H7zm6.4 0H17v14h-3.6z",
+    replay: "M5.4 13.2a6.8 6.8 0 1 0 1.9-5.9M6.6 3.6v4.2h4.2",
+  };
+  let tourEnded = false;
+  let tourShown = "";
+
+  function showTour() {
+    const state = tour.playing ? "pause" : tourEnded ? "replay" : "play";
+    if (state === tourShown) {
+      return;
+    }
+    tourShown = state;
+    tourButton.dataset.state = state;
+    tourPath.setAttribute("d", TOUR_ICONS[state]);
+    tourLabel.textContent = TOUR_LABELS[state];
+  }
+
+  function startTour(fresh = false) {
+    if (stopped || contextLost) {
+      return;
+    }
+    wheelPage.on = false;
+    settle = null;
+    tourEnded = false;
+    tour.start(window.scrollY, fresh);
+    tourWritten = Math.round(window.scrollY);
+    showTour();
+  }
+
+  function pauseTour() {
+    if (tour.playing) {
+      tour.stop();
+      /* Stopped with nothing to read, the page glides on to the nearest copy. */
+      still = 0;
+      checked = false;
+      showTour();
+    }
+  }
+
+  /* The tour waits for the scenes on its way to be built, rather than scroll onto an empty set. */
+  function built(from, to) {
+    for (const runtime of runtimes) {
+      if (runtime.b >= from && runtime.a <= to && (runtime.status === "idle" || runtime.status === "loading")) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  const onTourButton = (event) => event.target instanceof Node && tourButton.contains(event.target);
+  tourButton.addEventListener("click", () => (tour.playing ? pauseTour() : startTour()));
 
   /* --------------------------------------------------------------------------
      Input: never blocks scrolling or selection
      -------------------------------------------------------------------------- */
 
-  window.addEventListener("touchstart", () => {
-    touching = true;
+  window.addEventListener("touchstart", (event) => {
+    /* A tap on the tour's own button is not someone taking the page. */
+    touching = !onTourButton(event);
+  }, { passive: true });
+
+  /* A key or a press anywhere else stops the tour. Enter and Space on its button are the button's. */
+  window.addEventListener("keydown", (event) => {
+    if (!(onTourButton(event) && (event.key === "Enter" || event.key === " "))) {
+      pauseTour();
+    }
+  }, { passive: true });
+  window.addEventListener("pointerdown", (event) => {
+    if (!onTourButton(event)) {
+      pauseTour();
+    }
   }, { passive: true });
   const lift = () => {
     touching = false;
@@ -739,6 +880,7 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
   );
 
   window.addEventListener("pageshow", () => {
+    pauseTour();
     follower.reset(window.scrollY);
     y = follower.y;
     needsFrame = true;
@@ -832,14 +974,20 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
   captions.update(y, 0);
   draw(0.016);
   root.classList.add("world-on");
+  showTour();
+  document.body.append(tourButton);
   window.requestAnimationFrame(tick);
   pumpQueue();
+  if (/[?&]tour=1\b/.test(window.location.search)) {
+    startTour(true);
+  }
 
   /* From here the wheel eases the page, so copy and camera move together. Pinch zoom,
      sideways scrolling and an open nav drawer stay the browser's. */
   window.addEventListener(
     "wheel",
     (event) => {
+      pauseTour();
       if (
         event.ctrlKey ||
         stopped ||
@@ -881,6 +1029,21 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
     },
     get solved() {
       return solved;
+    },
+    tour: {
+      play: (fresh) => startTour(fresh),
+      pause: pauseTour,
+      get playing() {
+        return tour.playing;
+      },
+      get stops() {
+        return tour.stops.map((stop) => ({ ...stop }));
+      },
+      /** How long the whole tour takes, for tests that cannot wait 40 s. */
+      set seconds(value) {
+        tourSeconds = value;
+        planTour();
+      },
     },
     /** Where the film is now, which may be behind the page. */
     get y() {

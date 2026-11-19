@@ -117,6 +117,14 @@ where it is fully shown. The rest of that push is held there (`DETENT_REST`,
 about 30 screens on a desktop and 24 on a phone, where touch stays native. Rationale
 and measurements are in the spec's "As built" list.
 
+The film also has an **Auto tour**, off until asked for: a button in the bottom corner
+opposite the WhatsApp dock, or a link with `?tour=1` (`/?tour=1`, `/en/?tour=1`), which
+plays it from the open. It scrolls the page the way a person would, pushing on to each
+caption, stopping where it is fully shown and holding it for as long as its words take
+to read, and it ends on the call to action with a replay button. The whole page takes
+`TOUR_SECONDS` (40) in `engine/glide.js`, and `TOUR_READ` sets how much of that is spent
+reading rather than scrolling. Any scroll, key, click or tap stops it.
+
 ## How localization works
 
 Each language is a **real, separately crawlable document** — content is never
@@ -175,7 +183,9 @@ at the top of `main.css`. Change a value once to retheme.
 - `prefers-reduced-motion: reduce` gets still images and no film download. The
   blackout stays under 2 flashes a second, and rolls and FOV kicks are capped.
 - Reading order, headings and landmarks match the plain page. The canvas and the
-  caption-less spacers are `aria-hidden`, and the only added tab stop is the dock, last.
+  caption-less spacers are `aria-hidden`, and the only added tab stops are the dock, last,
+  and, once the film is running, the tour button after it. The tour only moves when asked,
+  and anything the visitor does stops it.
 - Every caption sits on a scrim that holds at least 4.5:1 over any frame. In the tall
   layout a WhatsApp link is visible and tappable at every scroll position.
 - Skip link, one `<h1>` per page, `aria-labelledby` on every section,

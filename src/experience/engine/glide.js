@@ -27,9 +27,16 @@ export const BRAKE = 0.45; // Screens over which the wheel slows into a caption,
 export const DETENT_REST = 0.35; // Seconds a caption always holds the wheel once the page stops on it.
 export const DETENT_MAX = 1.2; // Seconds it may hold a push that keeps coming, like a trackpad's coast.
 export const DETENT_PAUSE = 0.14; // Seconds without wheel input that end a push.
+export const TOUR_SECONDS = 40; // The tour, top to footer, stops included.
+export const TOUR_READ = 0.55; // The share of it spent stopped on copy. The rest is scrolling.
+export const TOUR_WORDS = 12; // Added to every stop's word count, so a short heading still gets a moment.
+export const TOUR_START = 0.6; // Seconds before it moves off copy the visitor is already looking at.
+export const TOUR_WAIT = 4; // Seconds it may wait at a stop for the next scene to finish building.
 
 const PACE_SAMPLES = 8192;
 const smoothstep = (u) => u * u * (3 - 2 * u);
+/* One push of a wheel: off quickly, then a long soft landing. Speed peaks a third of the way. */
+const flick = (u) => u * u * (6 - 8 * u + 3 * u * u);
 
 /**
  * The wheel's pacing over the page. zones are [from, to] stretches of scroll where
@@ -107,6 +114,112 @@ export function createPacer() {
         return down.find((y) => y > from + 0.5 && y <= to) ?? null;
       }
       return up.find((y) => y < from - 0.5 && y >= to) ?? null;
+    },
+  };
+}
+
+/**
+ * The tour: the page scrolls itself the way a person would, from one piece of copy to
+ * the next, stopping on each for as long as its words take to read. Moves are timed in
+ * the pacer's effort, so like the wheel it goes slowly over copy and quickly across
+ * the empty stretches. From the top to the last stop it takes `seconds`.
+ */
+export function createTour(pacer = createPacer()) {
+  let stops = []; // { y, read }: page order. The last is where it ends.
+  let perEffort = 0; // Seconds of scrolling per pixel of effort.
+  let next = 0; // The stop it is heading for.
+  let phase = "hold";
+  let clock = 0;
+  let length = 0;
+  let from = 0;
+  let to = 0;
+  let at = 0;
+
+  return {
+    playing: false,
+    get stops() {
+      return stops;
+    },
+    /** list is { y, words } per stop, in any order. */
+    plan(list, seconds = TOUR_SECONDS) {
+      stops = [];
+      for (const stop of [...list].sort((a, b) => a.y - b.y)) {
+        const y = Math.max(0, Math.round(stop.y));
+        const last = stops.at(-1);
+        if (last && y - last.y < 3) {
+          last.words = Math.max(last.words, stop.words);
+        } else {
+          stops.push({ y, words: stop.words, read: 0 });
+        }
+      }
+      if (stops.length < 2) {
+        perEffort = 0;
+        return;
+      }
+      const read = seconds * TOUR_READ;
+      const weight = stops.slice(0, -1).reduce((sum, stop) => sum + stop.words + TOUR_WORDS, 0);
+      stops.forEach((stop, index) => {
+        stop.read = index < stops.length - 1 ? (read * (stop.words + TOUR_WORDS)) / weight : 0;
+      });
+      const effort = pacer.toEffort(stops.at(-1).y) - pacer.toEffort(stops[0].y);
+      perEffort = effort > 0 ? (seconds - read) / effort : 0;
+    },
+    /** Starts from y. fresh: nobody has had time to read the copy there yet. At the end it starts again from the top. */
+    start(y, fresh = false) {
+      if (stops.length < 2) {
+        return;
+      }
+      this.playing = true;
+      phase = "hold";
+      clock = 0;
+      next = stops.findIndex((stop) => stop.y > y + 2);
+      if (next === -1) {
+        next = 1;
+        y = stops[0].y;
+        fresh = true;
+      }
+      const here = next > 0 && y - stops[next - 1].y <= 2 ? stops[next - 1] : null;
+      if (here) {
+        at = here.y;
+        length = fresh ? here.read + TOUR_START : Math.min(TOUR_START, here.read);
+      } else {
+        at = y;
+        length = TOUR_START;
+      }
+    },
+    stop() {
+      this.playing = false;
+    },
+    /** Returns where the page should be. ready(from, to) says whether that stretch is built. */
+    step(dt, ready = () => true) {
+      if (!this.playing) {
+        return at;
+      }
+      clock += dt;
+      if (phase === "hold") {
+        if (clock < length || (clock < length + TOUR_WAIT && !ready(at, stops[next].y))) {
+          return at;
+        }
+        from = pacer.toEffort(at);
+        to = pacer.toEffort(stops[next].y);
+        phase = "move";
+        clock = 0;
+        length = Math.max(0.3, (to - from) * perEffort);
+      }
+      const u = Math.min(1, clock / length);
+      at = pacer.fromEffort(from + (to - from) * flick(u));
+      if (u >= 1) {
+        at = stops[next].y;
+        if (next === stops.length - 1) {
+          this.playing = false;
+        } else {
+          phase = "hold";
+          clock = 0;
+          length = stops[next].read;
+          next += 1;
+        }
+      }
+      return at;
     },
   };
 }
