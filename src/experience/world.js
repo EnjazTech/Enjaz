@@ -1039,7 +1039,7 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
       get stops() {
         return tour.stops.map((stop) => ({ ...stop }));
       },
-      /** How long the whole tour takes, for tests that cannot wait 40 s. */
+      /** How long the whole tour takes, for tests that cannot wait for the real one. */
       set seconds(value) {
         tourSeconds = value;
         planTour();

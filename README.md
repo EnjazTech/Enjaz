@@ -122,8 +122,9 @@ opposite the WhatsApp dock, or a link with `?tour=1` (`/?tour=1`, `/en/?tour=1`)
 plays it from the open. It scrolls the page the way a person would, pushing on to each
 caption, stopping where it is fully shown and holding it for as long as its words take
 to read, and it ends on the call to action with a replay button. The whole page takes
-`TOUR_SECONDS` (40) in `engine/glide.js`, and `TOUR_READ` sets how much of that is spent
-reading rather than scrolling. Any scroll, key, click or tap stops it.
+`TOUR_SECONDS` (55) in `engine/glide.js`, and `TOUR_READ` (0.65) is the share of that spent
+stopped on copy rather than scrolling. To slow the scrolling itself, raise `TOUR_SECONDS`
+without raising `TOUR_READ`. Any scroll, key, click or tap stops it.
 
 ## How localization works
 
