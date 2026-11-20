@@ -25,7 +25,7 @@ import {
 import { createCaptions, ZONE } from "./engine/captions.js";
 import { Governor } from "./engine/governor.js";
 import { seeded } from "./engine/geo.js";
-import { createFollower, createPacer, createTour, createWheelPage, DIP_LAG, TOUR_SECONDS } from "./engine/glide.js";
+import { createFollower, createPacer, createTour, createWheelPage, DIP_LAG, TOUR_DROP, TOUR_FOCUS, TOUR_SECONDS, TOUR_SHEETS, TOUR_STRIP } from "./engine/glide.js";
 import { bakeLayout, watchLayout } from "./engine/layout.js";
 import { bakeKnots, bakeTable, sampleTable, WORLD } from "./engine/rail.js";
 import { createText, waitForFonts } from "./engine/text.js";
@@ -182,8 +182,10 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
   }
 
   /* The tour stops where each caption is fully shown, as the wheel does, and on the
-     strip's own words. Each stop is held for as long as its words take to read. It
-     ends on the last caption, the call to action, rather than leave it for the footer. */
+     strip's own words. Each stop is held for as long as its words take to read, longer
+     for Services, How we work and the spreadsheets question, and the film under the hero
+     plays slowly. It ends on the last caption, the call to action, rather than leave it
+     for the footer. */
   function planTour() {
     const stops = [];
     for (const [id, shot] of Object.entries(layout.shots)) {
@@ -192,12 +194,15 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
         const words = [...copy.children]
           .filter((kid) => kid.getAttribute("aria-hidden") !== "true")
           .reduce((sum, kid) => sum + kid.textContent.trim().split(/\s+/).filter(Boolean).length, 0);
-        stops.push({ y: id === "hero" ? 0 : shot.pinStart, words });
+        const hold = /^(svc|process|step)\./.test(id) ? TOUR_FOCUS : id === "why.q" ? TOUR_SHEETS : 1;
+        /* Services' heading is where the drop lands. */
+        const slow = id === "svc.head" ? TOUR_DROP : 1;
+        stops.push({ y: id === "hero" ? 0 : shot.pinStart, words, hold, slow });
       }
     }
     const strip = captions.stripWords();
     if (strip) {
-      stops.push({ y: (strip[0] + strip[1]) / 2, words: 0 });
+      stops.push({ y: (strip[0] + strip[1]) / 2, words: 0, hold: TOUR_STRIP, slow: TOUR_DROP });
     }
     const playing = tour.playing;
     tour.plan(stops, tourSeconds);

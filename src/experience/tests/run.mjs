@@ -1615,6 +1615,32 @@ await check("E29", "the tour is off until asked for, stops on every caption, and
     const time = held.get(stop.y) ?? 0;
     assert(time >= stop.read - 0.05, `held ${stop.y} for ${time.toFixed(2)} s, against ${stop.read.toFixed(2)}`);
   }
+  /* A longer hold and a slower move add to the tour; every other stop keeps its time. */
+  /* Seconds from leaving the top to arriving at y. */
+  const moveTo = (tour, y) => {
+    tour.start(0, true);
+    let left = null;
+    for (let clock = 0; tour.playing && clock < 200; clock += 1 / 60) {
+      const at = tour.step(1 / 60);
+      if (left === null && at > 0) {
+        left = clock;
+      }
+      if (at === y) {
+        return clock - left;
+      }
+    }
+    return NaN;
+  };
+  const slowed = createTour(pacer);
+  slowed.plan([{ y: 8000, words: 20 }, { y: 0, words: 30 }, { y: 3000, words: 10, hold: 2, slow: 3 }, { y: 11000, words: 0 }]);
+  const slowedReads = slowed.stops.map((stop) => stop.read);
+  assert(
+    Math.abs(slowedReads[1] - reads[1] * 2) < 0.01 && [0, 2, 3].every((i) => Math.abs(slowedReads[i] - reads[i]) < 0.01),
+    `holds ${slowedReads} against ${reads}`
+  );
+  const before = moveTo(plan, 3000);
+  const after = moveTo(slowed, 3000);
+  assert(Math.abs(after - before * 3) < 0.1, `the slowed move took ${after.toFixed(2)} s against ${before.toFixed(2)} s`);
   /* Started on a stop it moves off after a beat; between stops it heads for the next; at the end it starts again. */
   plan.start(3000);
   let waited = 0;

@@ -1577,8 +1577,44 @@ a.lang__opt:focus-visible {
   html.w3d .card.track[data-shot="svc.rescue"] {
     --span: 48svh;
   }
+  /* 30svh before the steps' copy was set larger: the extra is the room it took, so the
+     hold stays longer than a PageDown. */
   html.w3d .step.track {
-    --span: 30svh;
+    --span: 34svh;
+  }
+  /* Services and How we work are what a visitor came to learn, so their copy is set
+     larger, and on a wide screen it stands in the middle of the frame beside the
+     subject rather than down in the corner. The camera frames the subject in the room
+     left beside it (freeRect in engine/rail.js), and the wheel and the tour stop where
+     it is fully shown, so both follow from these numbers. */
+  html.w3d :is(#services, #process) .eyebrow {
+    font-size: 0.9375rem;
+  }
+  html.w3d :is(#services, #process) h2 {
+    font-size: clamp(1.875rem, 1.2rem + 2.2vw, 3.25rem);
+  }
+  html.w3d .card__tag {
+    margin-block-end: 0.875rem;
+    font-size: 0.9375rem;
+  }
+  html.w3d .step__number {
+    margin-block-end: 0.75rem;
+    font-size: clamp(3rem, 2rem + 3vw, 4.5rem);
+  }
+  html.w3d :is(.card__title, .step__title) {
+    margin-block-end: 0.75rem;
+    font-size: clamp(1.625rem, 1.1rem + 1.6vw, 2.375rem);
+    font-weight: 700;
+  }
+  html.w3d :is(.card__text, .step__text) {
+    font-size: clamp(1.0625rem, 0.95rem + 0.45vw, 1.3125rem);
+    line-height: 1.75;
+  }
+  @media (orientation: landscape) and (min-height: 34rem) {
+    html.w3d :is(#services, #process) {
+      --pin: 30svh;
+      --caption-max: min(36rem, 46vw);
+    }
   }
   html.w3d #why {
     --span: 48svh;

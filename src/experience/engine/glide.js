@@ -27,11 +27,17 @@ export const BRAKE = 0.45; // Screens over which the wheel slows into a caption,
 export const DETENT_REST = 0.35; // Seconds a caption always holds the wheel once the page stops on it.
 export const DETENT_MAX = 1.2; // Seconds it may hold a push that keeps coming, like a trackpad's coast.
 export const DETENT_PAUSE = 0.14; // Seconds without wheel input that end a push.
-export const TOUR_SECONDS = 55; // The tour, top to the call to action, stops included.
-export const TOUR_READ = 0.65; // The share of it spent stopped on copy. The rest is scrolling.
+export const TOUR_SECONDS = 60; // The tour, top to the call to action, stops included, before the longer holds below.
+export const TOUR_READ = 0.85; // The share of it spent stopped on copy. The rest is scrolling.
 export const TOUR_WORDS = 12; // Added to every stop's word count, so a short heading still gets a moment.
 export const TOUR_START = 0.6; // Seconds before it moves off copy the visitor is already looking at.
 export const TOUR_WAIT = 4; // Seconds it may wait at a stop for the next scene to finish building.
+/* Times as long as a stop with the same words elsewhere. They add to the tour rather
+   than take from the other stops, so everything else keeps its timing. */
+export const TOUR_FOCUS = 1.75; // Services and How we work: what a visitor most needs to read.
+export const TOUR_SHEETS = 1.5; // "Still working with spreadsheets?"
+export const TOUR_STRIP = 2.5; // The strip's own words, under the hero.
+export const TOUR_DROP = 5; // Times as slow: the film under the hero, down the strip and through the floor.
 
 const PACE_SAMPLES = 8192;
 const smoothstep = (u) => u * u * (3 - 2 * u);
@@ -126,10 +132,11 @@ export function createPacer() {
  * The tour: the page scrolls itself the way a person would, from one piece of copy to
  * the next, stopping on each for as long as its words take to read. Moves are timed in
  * the pacer's effort, so like the wheel it goes slowly over copy and quickly across
- * the empty stretches. From the top to the last stop it takes `seconds`.
+ * the empty stretches. From the top to the last stop it takes `seconds`, plus what any
+ * longer holds (hold) and slower moves (slow, for the move that arrives there) add.
  */
 export function createTour(pacer = createPacer()) {
-  let stops = []; // { y, read }: page order. The last is where it ends.
+  let stops = []; // { y, words, hold, slow, read }: page order. The last is where it ends.
   let perEffort = 0; // Seconds of scrolling per pixel of effort.
   let next = 0; // The stop it is heading for.
   let phase = "hold";
@@ -144,16 +151,20 @@ export function createTour(pacer = createPacer()) {
     get stops() {
       return stops;
     },
-    /** list is { y, words } per stop, in any order. */
+    /** list is { y, words, hold?, slow? } per stop, in any order. */
     plan(list, seconds = TOUR_SECONDS) {
       stops = [];
       for (const stop of [...list].sort((a, b) => a.y - b.y)) {
         const y = Math.max(0, Math.round(stop.y));
+        const hold = stop.hold ?? 1;
+        const slow = stop.slow ?? 1;
         const last = stops.at(-1);
         if (last && y - last.y < 3) {
           last.words = Math.max(last.words, stop.words);
+          last.hold = Math.max(last.hold, hold);
+          last.slow = Math.max(last.slow, slow);
         } else {
-          stops.push({ y, words: stop.words, read: 0 });
+          stops.push({ y, words: stop.words, hold, slow, read: 0 });
         }
       }
       if (stops.length < 2) {
@@ -167,7 +178,7 @@ export function createTour(pacer = createPacer()) {
       stops.forEach((stop, index) => {
         stop.read =
           index < stops.length - 1
-            ? (read * (stop.words + TOUR_WORDS)) / weight
+            ? (read * (stop.words + TOUR_WORDS) * stop.hold) / weight
             : 0;
       });
       const effort =
@@ -220,7 +231,7 @@ export function createTour(pacer = createPacer()) {
         to = pacer.toEffort(stops[next].y);
         phase = "move";
         clock = 0;
-        length = Math.max(0.3, (to - from) * perEffort);
+        length = Math.max(0.3, (to - from) * perEffort) * stops[next].slow;
       }
       const u = Math.min(1, clock / length);
       at = pacer.fromEffort(from + (to - from) * flick(u));

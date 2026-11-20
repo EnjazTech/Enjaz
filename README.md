@@ -122,9 +122,17 @@ opposite the WhatsApp dock, or a link with `?tour=1` (`/?tour=1`, `/en/?tour=1`)
 plays it from the open. It scrolls the page the way a person would, pushing on to each
 caption, stopping where it is fully shown and holding it for as long as its words take
 to read, and it ends on the call to action with a replay button. The whole page takes
-`TOUR_SECONDS` (55) in `engine/glide.js`, and `TOUR_READ` (0.65) is the share of that spent
+`TOUR_SECONDS` (60) in `engine/glide.js`, and `TOUR_READ` (0.85) is the share of that spent
 stopped on copy rather than scrolling. To slow the scrolling itself, raise `TOUR_SECONDS`
-without raising `TOUR_READ`. Any scroll, key, click or tap stops it.
+without raising `TOUR_READ`. Some stops get longer on top of that, without taking time
+from the rest: Services and How we work hold `TOUR_FOCUS` (1.75) times as long, the
+spreadsheets question `TOUR_SHEETS` (1.5), the strip's words under the hero `TOUR_STRIP`
+(2.5), and the film down the strip plays `TOUR_DROP` (5) times slower. With them it takes
+about 93 s. Any scroll, key, click or tap stops it.
+
+Services and How we work are set larger than the other captions, and on a wide screen
+their copy stands in the middle of the frame beside the 3D subject rather than in the
+bottom corner (`--pin` and `--caption-max` on `#services, #process` in `main.css`).
 
 ## How localization works
 
