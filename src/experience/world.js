@@ -49,6 +49,18 @@ const SETTLE_CRUISE = 2; // Screens a second at most.
    the scope's ring lighting, the build assembling. Automation runs by itself, and the
    launch is left as it was. */
 const PLAYED = new Set(["svc.web", "svc.apps", "svc.api", "svc.rescue", "svc.ux", "step.talk", "step.scope", "step.build"]);
+/* From Services to Why us the world never stands still: the camera swings slowly round
+   a point on its line of sight at the subject's distance, so the subject stays put
+   beside the copy while the room behind it moves, as it does when a pointer crosses
+   the page. It runs on time, which tests freeze, and fades in out of the drop and out
+   before the call to action. */
+const DRIFT_YAW = 0.06; // Radians each way, round the camera's own up.
+const DRIFT_PITCH = 0.022; // Radians each way, round its own right.
+const DRIFT_TURN = 1.8; // Times as far, round the vertical, where it looks straight down.
+const DRIFT_YAW_S = 12; // Seconds for one swing there and back.
+const DRIFT_PITCH_S = 17;
+const DRIFT_HZ = 30; // Frames a second it draws while the page rests.
+const DRIFT_PIVOT = 8; // Metres ahead it swings round where a shot has no subject.
 
 const nextTask = () =>
   new Promise((done) => {
@@ -424,6 +436,67 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
   const tilt = new Quaternion();
   const axisY = new Vector3(0, 1, 0);
   const axisX = new Vector3(1, 0, 0);
+  const swing = new Quaternion();
+  const pivot = new Vector3();
+  const orbit = new Vector3();
+  const subjectAt = new Vector3();
+  const ahead = new Vector3();
+
+  /** How much the world drifts at y2, from 0 to 1: Services to Why us. */
+  function driftWeight(y2) {
+    const first = byId["svc.head"];
+    const last = byId["why.stats"];
+    const after = byId.cta;
+    const ramp = (from, to) => (to > from ? Math.min(1, Math.max(0, (y2 - from) / (to - from))) : y2 >= to ? 1 : 0);
+    return eased(ramp(first.a, first.s)) * (1 - eased(ramp(last.e, after.s)));
+  }
+
+  /* How far ahead the swing's centre is: the subject's depth, blended from the shot
+     before to this one while the camera travels between them. On the desk it is the
+     phone, which hangs well above the desk until it lands and is what you look at. */
+  function driftDepth(runtime) {
+    if (runtime.meta.desk && desk.phone.visible) {
+      desk.phone.updateWorldMatrix(true, false);
+      desk.phone.getWorldPosition(subjectAt);
+    } else {
+      const subject = solved[runtime.meta.id]?.subject;
+      if (!subject) {
+        return DRIFT_PIVOT;
+      }
+      subjectAt.set(subject[0], subject[1], subject[2]);
+    }
+    ahead.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    return Math.max(0.5, subjectAt.sub(camera.position).dot(ahead));
+  }
+
+  function applyDrift(y2) {
+    const weight = driftWeight(y2);
+    if (weight <= 0) {
+      return;
+    }
+    const index = nearestIndex(y2);
+    const runtime = runtimes[index];
+    let depth = driftDepth(runtime);
+    if (index > 0 && y2 < runtime.s && runtime.s > runtime.a) {
+      depth += (driftDepth(runtimes[index - 1]) - depth) * (1 - eased((y2 - runtime.a) / (runtime.s - runtime.a)));
+    }
+    /* Looking straight down, a sideways swing would tip the lines that rise towards
+       the camera across the frame, so there it turns round the vertical instead, a
+       little further: the floor revolves slowly under the subject. */
+    ahead.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    const down = eased(Math.min(1, Math.max(0, (-ahead.y - 0.75) / 0.23)));
+    const yaw = weight * DRIFT_YAW * (1 + down * (DRIFT_TURN - 1)) * Math.sin((time / DRIFT_YAW_S) * Math.PI * 2);
+    const pitch = weight * (1 - down) * DRIFT_PITCH * Math.sin((time / DRIFT_PITCH_S) * Math.PI * 2 + 1.3);
+    pivot.copy(ahead).multiplyScalar(depth).add(camera.position);
+    orbit.set(0, 1, 0).applyQuaternion(camera.quaternion).lerp(axisY, down).normalize();
+    swing.setFromAxisAngle(orbit, yaw);
+    orbit.set(1, 0, 0).applyQuaternion(camera.quaternion);
+    tilt.setFromAxisAngle(orbit, pitch);
+    swing.multiply(tilt);
+    orbit.copy(camera.position).sub(pivot).applyQuaternion(swing);
+    camera.position.copy(pivot).add(orbit);
+    camera.quaternion.premultiply(swing);
+  }
   const p = { t: 0, enter: 0, hold: 0, exit: 0, y: 0, v: 0, time: 0, dt: 0, px: 0, py: 0, pointer: 0 };
 
   const follower = createFollower(window.scrollY);
@@ -523,15 +596,8 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
   function draw(dt) {
     sampleTable(table, docH, y, sample);
 
-    /* The pointer tips the camera slightly: the world is there, not painted on. */
     camera.position.set(sample[0], sample[1], sample[2]);
     camera.quaternion.set(sample[3], sample[4], sample[5], sample[6]);
-    if (pointerKind === 1) {
-      tilt.setFromAxisAngle(axisY, -smoothX * 0.012);
-      camera.quaternion.multiply(tilt);
-      tilt.setFromAxisAngle(axisX, smoothY * 0.009);
-      camera.quaternion.multiply(tilt);
-    }
     camera.fov = sample[7];
     camera.near = sample[8];
     camera.far = sample[9];
@@ -548,6 +614,17 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
     desk.group.visible = deskVisible;
     desk.setAct(act);
     archive.group.visible = y > archiveOnY && y < archiveOffY;
+
+    /* After the desk and its phone are placed for this y, since the drift swings
+       round the phone. Then the pointer tips the camera slightly: the world is there,
+       not painted on. */
+    applyDrift(y);
+    if (pointerKind === 1) {
+      tilt.setFromAxisAngle(axisY, -smoothX * 0.012);
+      camera.quaternion.multiply(tilt);
+      tilt.setFromAxisAngle(axisX, smoothY * 0.009);
+      camera.quaternion.multiply(tilt);
+    }
     shared.uLampOn.value = deskVisible ? 1 - shared.uDawn.value * 0.72 : 0;
     shared.uLampOrigin.value.copy(desk.group.position);
     shared.uLampColor.value.set(1, 0.7, 0.42);
@@ -707,7 +784,7 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
     const pointerMoving = Math.abs(pointerX - smoothX) > 0.001 || Math.abs(pointerY - smoothY) > 0.001;
 
     const active = runtimes[nearestIndex(y)];
-    const idleHz = active.meta.idleHz;
+    const idleHz = Math.max(active.meta.idleHz, driftWeight(y) > 0 ? DRIFT_HZ : 0);
     /* Render-on-demand is the thermal control: a resting page costs no GPU. */
     let dirty = scrolling || pointerMoving || needsFrame;
     if (!dirty && idleHz > 0 && !(tier === "L" && now - lastInput > IDLE_STOP_MS)) {
@@ -1035,6 +1112,7 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
     renderer,
     governor,
     scene,
+    camera,
     stop,
     pacer,
     get layout() {

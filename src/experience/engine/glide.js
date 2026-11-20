@@ -34,14 +34,14 @@ export const TOUR_START = 0.6; // Seconds before it moves off copy the visitor i
 export const TOUR_WAIT = 4; // Seconds it may wait at a stop for the next scene to finish building.
 /* Times as long as a stop with the same words elsewhere. They add to the tour rather
    than take from the other stops, so everything else keeps its timing. */
-export const TOUR_FOCUS = 1.75; // Services and How we work: what a visitor most needs to read.
+export const TOUR_FOCUS = 1.5; // Services and How we work: what a visitor most needs to read.
 export const TOUR_SHEETS = 1.5; // "Still working with spreadsheets?"
-export const TOUR_STRIP = 2.5; // The strip's own words, under the hero.
+export const TOUR_STRIP = 1.5; // The strip's own words, under the hero.
 /* Seconds to scroll, gently and evenly, through a scene that changes as you scroll
    (the app's list filling, the design ironing out), after the stop and before moving on. */
 export const TOUR_PLAY = 2.2;
-export const TOUR_DROP = 3.4; // Times as slow: the film under the hero, down the strip (about 1.3 s),
-export const TOUR_FALL = 1.8; // and on through the floor into Services (about 0.5 s).
+export const TOUR_DROP = 2.3; // Times as slow: the film under the hero, down the strip (about 0.9 s),
+export const TOUR_FALL = 1.3; // and on through the floor into Services (about 0.4 s).
 
 const PACE_SAMPLES = 8192;
 const smoothstep = (u) => u * u * (3 - 2 * u);
@@ -175,7 +175,15 @@ export function createTour(pacer = createPacer()) {
           last.hold = Math.max(last.hold, hold);
           last.slow = Math.max(last.slow, slow);
         } else {
-          stops.push({ y, words: stop.words, hold, slow, through, play, read: 0 });
+          stops.push({
+            y,
+            words: stop.words,
+            hold,
+            slow,
+            through,
+            play,
+            read: 0,
+          });
         }
       }
       /* Never played past the next stop. */

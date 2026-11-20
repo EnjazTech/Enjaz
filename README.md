@@ -125,14 +125,19 @@ to read, and it ends on the call to action with a replay button. The whole page 
 `TOUR_SECONDS` (60) in `engine/glide.js`, and `TOUR_READ` (0.85) is the share of that spent
 stopped on copy rather than scrolling. To slow the scrolling itself, raise `TOUR_SECONDS`
 without raising `TOUR_READ`. Some stops get longer on top of that, without taking time
-from the rest: Services and How we work hold `TOUR_FOCUS` (1.75) times as long, the
+from the rest: Services and How we work hold `TOUR_FOCUS` (1.5) times as long, the
 spreadsheets question `TOUR_SHEETS` (1.5), the strip's words under the hero `TOUR_STRIP`
-(2.5), and the film under the hero plays slower: `TOUR_DROP` (3.4) times down the strip,
-about 1.3 s, and `TOUR_FALL` (1.8) times through the floor, about 0.5 s. After the stop
-on each service but automation, and on Talk, Scope and Build, it scrolls evenly through
-the scene for `TOUR_PLAY` (2.2 s), so the app's list filling, the design ironing out or
-the scope's ring lighting is seen happening (`PLAYED` in `world.js`). With all of it the
-tour takes about 107 s. Any scroll, key, click or tap stops it.
+(1.5), and the film under the hero plays a little slower: `TOUR_DROP` (2.3) times down
+the strip, about 0.9 s, and `TOUR_FALL` (1.3) times through the floor, about 0.4 s. After
+the stop on each service but automation, and on Talk, Scope and Build, it scrolls evenly
+through the scene for `TOUR_PLAY` (2.2 s), so the app's list filling, the design ironing
+out or the scope's ring lighting is seen happening (`PLAYED` in `world.js`). With all of
+it the tour takes about 97 s. Any scroll, key, click or tap stops it.
+
+From Services to Why us the world never stands still, tour or not: the camera swings
+slowly round the subject, which stays put beside the copy while the room behind it moves,
+and where it looks straight down the floor turns slowly under the subject instead
+(`DRIFT_*` in `world.js`).
 
 Services, How we work and Why us are set larger than the other captions, and on a wide
 screen their copy stands in the middle of the frame beside the 3D subject rather than in
