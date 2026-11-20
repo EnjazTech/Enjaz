@@ -127,8 +127,9 @@ stopped on copy rather than scrolling. To slow the scrolling itself, raise `TOUR
 without raising `TOUR_READ`. Some stops get longer on top of that, without taking time
 from the rest: Services and How we work hold `TOUR_FOCUS` (1.75) times as long, the
 spreadsheets question `TOUR_SHEETS` (1.5), the strip's words under the hero `TOUR_STRIP`
-(2.5), and the film down the strip plays `TOUR_DROP` (5) times slower. With them it takes
-about 93 s. Any scroll, key, click or tap stops it.
+(2.5), and the film under the hero plays slower: `TOUR_DROP` (3.4) times down the strip,
+about 1.3 s, and `TOUR_FALL` (1.8) times through the floor, about 0.5 s. With them it
+takes about 91 s. Any scroll, key, click or tap stops it.
 
 Services and How we work are set larger than the other captions, and on a wide screen
 their copy stands in the middle of the frame beside the 3D subject rather than in the

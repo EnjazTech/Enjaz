@@ -37,7 +37,8 @@ export const TOUR_WAIT = 4; // Seconds it may wait at a stop for the next scene 
 export const TOUR_FOCUS = 1.75; // Services and How we work: what a visitor most needs to read.
 export const TOUR_SHEETS = 1.5; // "Still working with spreadsheets?"
 export const TOUR_STRIP = 2.5; // The strip's own words, under the hero.
-export const TOUR_DROP = 5; // Times as slow: the film under the hero, down the strip and through the floor.
+export const TOUR_DROP = 3.4; // Times as slow: the film under the hero, down the strip (about 1.3 s),
+export const TOUR_FALL = 1.8; // and on through the floor into Services (about 0.5 s).
 
 const PACE_SAMPLES = 8192;
 const smoothstep = (u) => u * u * (3 - 2 * u);
