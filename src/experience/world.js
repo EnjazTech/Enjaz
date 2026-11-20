@@ -25,7 +25,7 @@ import {
 import { createCaptions, ZONE } from "./engine/captions.js";
 import { Governor } from "./engine/governor.js";
 import { seeded } from "./engine/geo.js";
-import { createFollower, createPacer, createTour, createWheelPage, DIP_LAG, TOUR_DROP, TOUR_FALL, TOUR_FOCUS, TOUR_SECONDS, TOUR_SHEETS, TOUR_STRIP } from "./engine/glide.js";
+import { createFollower, createPacer, createTour, createWheelPage, DIP_LAG, TOUR_DROP, TOUR_FALL, TOUR_FOCUS, TOUR_PLAY, TOUR_SECONDS, TOUR_SHEETS, TOUR_STRIP } from "./engine/glide.js";
 import { bakeLayout, watchLayout } from "./engine/layout.js";
 import { bakeKnots, bakeTable, sampleTable, WORLD } from "./engine/rail.js";
 import { createText, waitForFonts } from "./engine/text.js";
@@ -44,6 +44,11 @@ const DIP_REST_MS = 900;
 const SETTLE_AFTER = 0.35; // Seconds the page must be still before it glides to the nearest copy.
 const SETTLE_EASE = 5; // Per second.
 const SETTLE_CRUISE = 2; // Screens a second at most.
+/* The tour plays these scenes through (TOUR_PLAY): the shop opening, the app's list
+   filling, the capsules running, the jam clearing, the design ironing out, the call,
+   the scope's ring lighting, the build assembling. Automation runs by itself, and the
+   launch is left as it was. */
+const PLAYED = new Set(["svc.web", "svc.apps", "svc.api", "svc.rescue", "svc.ux", "step.talk", "step.scope", "step.build"]);
 
 const nextTask = () =>
   new Promise((done) => {
@@ -197,7 +202,10 @@ export async function start({ canvas, gl, tier, forced, onFail, onOff, onOn, isF
         const hold = /^(svc|process|step)\./.test(id) ? TOUR_FOCUS : id === "why.q" ? TOUR_SHEETS : 1;
         /* Services' heading is where the drop lands. */
         const slow = id === "svc.head" ? TOUR_FALL : 1;
-        stops.push({ y: id === "hero" ? 0 : shot.pinStart, words, hold, slow });
+        /* These scenes change as the page scrolls through their caption's hold, so the
+           tour scrolls through it slowly enough to watch. */
+        const play = PLAYED.has(id) ? TOUR_PLAY : 0;
+        stops.push({ y: id === "hero" ? 0 : shot.pinStart, words, hold, slow, through: shot.pinEnd, play });
       }
     }
     const strip = captions.stripWords();

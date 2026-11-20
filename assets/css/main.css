@@ -1385,7 +1385,11 @@ a.lang__opt:focus-visible {
   html.w3d {
     --pace: 3;
     --pace-gap: 1;
-    --pin: 12svh;
+    /* The row the tour button and the WhatsApp dock sit in, from the bottom, plus a
+       gap: no caption pins under it, so the buttons never cover copy that is being
+       read, home indicator or not. */
+    --clear: calc(max(1rem, env(safe-area-inset-bottom)) + 4.5rem);
+    --pin: max(12svh, var(--clear));
     --gap: 66svh;
     --span: 34svh;
     --caption-max: 100%;
@@ -1404,7 +1408,7 @@ a.lang__opt:focus-visible {
   }
   @media (orientation: landscape) {
     html.w3d {
-      --pin: 14svh;
+      --pin: max(14svh, var(--clear));
       --gap: 56svh;
       --caption-max: 30rem;
     }
@@ -1617,7 +1621,7 @@ a.lang__opt:focus-visible {
     }
   }
   /* Why us is set as large, on a wider column so the longer copy does not grow too
-     tall, and stays pinned low. */
+     tall, and stands in the middle of the frame too (below). */
   html.w3d #why .eyebrow {
     font-size: 0.9375rem;
   }
@@ -1639,6 +1643,7 @@ a.lang__opt:focus-visible {
   }
   @media (orientation: landscape) and (min-height: 34rem) {
     html.w3d #why {
+      --pin: 30svh;
       --caption-max: min(36rem, 46vw);
     }
   }

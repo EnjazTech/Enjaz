@@ -128,13 +128,17 @@ without raising `TOUR_READ`. Some stops get longer on top of that, without takin
 from the rest: Services and How we work hold `TOUR_FOCUS` (1.75) times as long, the
 spreadsheets question `TOUR_SHEETS` (1.5), the strip's words under the hero `TOUR_STRIP`
 (2.5), and the film under the hero plays slower: `TOUR_DROP` (3.4) times down the strip,
-about 1.3 s, and `TOUR_FALL` (1.8) times through the floor, about 0.5 s. With them it
-takes about 91 s. Any scroll, key, click or tap stops it.
+about 1.3 s, and `TOUR_FALL` (1.8) times through the floor, about 0.5 s. After the stop
+on each service but automation, and on Talk, Scope and Build, it scrolls evenly through
+the scene for `TOUR_PLAY` (2.2 s), so the app's list filling, the design ironing out or
+the scope's ring lighting is seen happening (`PLAYED` in `world.js`). With all of it the
+tour takes about 107 s. Any scroll, key, click or tap stops it.
 
-Services and How we work are set larger than the other captions, and on a wide screen
-their copy stands in the middle of the frame beside the 3D subject rather than in the
-bottom corner (`--pin` and `--caption-max` on `#services, #process` in `main.css`). Why us
-is set as large, on the same wider column, but stays pinned low.
+Services, How we work and Why us are set larger than the other captions, and on a wide
+screen their copy stands in the middle of the frame beside the 3D subject rather than in
+the bottom corner (`--pin` and `--caption-max` on `#services, #process, #why` in
+`main.css`). No caption ever pins under the row the tour button and the WhatsApp dock
+sit in (`--clear`).
 
 ## How localization works
 

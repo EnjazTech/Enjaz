@@ -1439,9 +1439,18 @@ await check("E26", "find-in-page and PageDown always land on readable copy", asy
         out.push(`not found: ${text}`);
         continue;
       }
-      await window.__wait(1100);
-      const rect = heading.getBoundingClientRect();
-      const seen = window.__seen(heading);
+      /* A tall caption that stands mid-frame (why.q) is found just short of its hold,
+         and finishes appearing in place there: by 0.8 s on a GPU, later on software GL. */
+      let rect = null;
+      let seen = 0;
+      for (let waited = 0; waited < 3000; waited += 100) {
+        await window.__wait(100);
+        rect = heading.getBoundingClientRect();
+        seen = window.__seen(heading);
+        if (waited >= 1000 && seen >= 0.99) {
+          break;
+        }
+      }
       if (seen < 0.99 || rect.top < 0 || rect.bottom > window.innerHeight) {
         out.push(`${heading.textContent.trim().slice(0, 24)}: opacity ${seen.toFixed(2)}, ${rect.top.toFixed(0)}..${rect.bottom.toFixed(0)}`);
       }
@@ -1641,6 +1650,24 @@ await check("E29", "the tour is off until asked for, stops on every caption, and
   const before = moveTo(plan, 3000);
   const after = moveTo(slowed, 3000);
   assert(Math.abs(after - before * 3) < 0.1, `the slowed move took ${after.toFixed(2)} s against ${before.toFixed(2)} s`);
+  /* A played stop scrolls on to through over play seconds, never backwards, then moves on; it never plays past the next stop. */
+  const played = createTour(pacer);
+  played.plan([{ y: 0, words: 30 }, { y: 3000, words: 10, through: 3800, play: 2 }, { y: 8000, words: 20, through: 12000, play: 2 }, { y: 11000, words: 0 }]);
+  assert(played.stops[2].play === 0 && played.stops[2].through === 8000, `played past the next stop: ${JSON.stringify(played.stops[2])}`);
+  played.start(3000);
+  let left = null;
+  let through = null;
+  let back = false;
+  for (let clock = 0, last = 3000; clock < 60 && played.playing; clock += 1 / 60) {
+    const y = played.step(1 / 60);
+    back ||= y < last;
+    left ??= y > 3000 ? clock : null;
+    through ??= y >= 3800 ? clock : null;
+    last = y;
+  }
+  assert(!back, "the tour went backwards");
+  assert(through !== null && Math.abs(through - left - 2) < 0.1, `played 3000 to 3800 in ${(through - left).toFixed(2)} s, not 2`);
+  assert(!played.playing, "did not move on after playing");
   /* Started on a stop it moves off after a beat; between stops it heads for the next; at the end it starts again. */
   plan.start(3000);
   let waited = 0;

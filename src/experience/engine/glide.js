@@ -37,6 +37,9 @@ export const TOUR_WAIT = 4; // Seconds it may wait at a stop for the next scene 
 export const TOUR_FOCUS = 1.75; // Services and How we work: what a visitor most needs to read.
 export const TOUR_SHEETS = 1.5; // "Still working with spreadsheets?"
 export const TOUR_STRIP = 2.5; // The strip's own words, under the hero.
+/* Seconds to scroll, gently and evenly, through a scene that changes as you scroll
+   (the app's list filling, the design ironing out), after the stop and before moving on. */
+export const TOUR_PLAY = 2.2;
 export const TOUR_DROP = 3.4; // Times as slow: the film under the hero, down the strip (about 1.3 s),
 export const TOUR_FALL = 1.8; // and on through the floor into Services (about 0.5 s).
 
@@ -134,10 +137,11 @@ export function createPacer() {
  * the next, stopping on each for as long as its words take to read. Moves are timed in
  * the pacer's effort, so like the wheel it goes slowly over copy and quickly across
  * the empty stretches. From the top to the last stop it takes `seconds`, plus what any
- * longer holds (hold) and slower moves (slow, for the move that arrives there) add.
+ * longer holds (hold), slower moves (slow, for the move that arrives there) and scenes
+ * played through (through, play) add.
  */
 export function createTour(pacer = createPacer()) {
-  let stops = []; // { y, words, hold, slow, read }: page order. The last is where it ends.
+  let stops = []; // { y, words, hold, slow, through, play, read }: page order. The last is where it ends.
   let perEffort = 0; // Seconds of scrolling per pixel of effort.
   let next = 0; // The stop it is heading for.
   let phase = "hold";
@@ -152,22 +156,36 @@ export function createTour(pacer = createPacer()) {
     get stops() {
       return stops;
     },
-    /** list is { y, words, hold?, slow? } per stop, in any order. */
+    /**
+     * list is { y, words, hold?, slow?, through?, play? } per stop, in any order.
+     * through: after the stop it scrolls on to there evenly over play seconds, so a
+     * scene that changes with the scroll is seen doing it, then moves on as usual.
+     */
     plan(list, seconds = TOUR_SECONDS) {
       stops = [];
       for (const stop of [...list].sort((a, b) => a.y - b.y)) {
         const y = Math.max(0, Math.round(stop.y));
         const hold = stop.hold ?? 1;
         const slow = stop.slow ?? 1;
+        const through = stop.through > y + 2 ? Math.round(stop.through) : y;
+        const play = through > y ? (stop.play ?? 0) : 0;
         const last = stops.at(-1);
         if (last && y - last.y < 3) {
           last.words = Math.max(last.words, stop.words);
           last.hold = Math.max(last.hold, hold);
           last.slow = Math.max(last.slow, slow);
         } else {
-          stops.push({ y, words: stop.words, hold, slow, read: 0 });
+          stops.push({ y, words: stop.words, hold, slow, through, play, read: 0 });
         }
       }
+      /* Never played past the next stop. */
+      stops.forEach((stop, index) => {
+        const after = stops[index + 1];
+        if (!after || stop.through >= after.y || stop.play <= 0) {
+          stop.through = stop.y;
+          stop.play = 0;
+        }
+      });
       if (stops.length < 2) {
         perEffort = 0;
         return;
@@ -221,6 +239,13 @@ export function createTour(pacer = createPacer()) {
         return at;
       }
       clock += dt;
+      const move = () => {
+        from = pacer.toEffort(at);
+        to = pacer.toEffort(stops[next].y);
+        phase = "move";
+        clock = 0;
+        length = Math.max(0.3, (to - from) * perEffort) * stops[next].slow;
+      };
       if (phase === "hold") {
         if (
           clock < length ||
@@ -228,11 +253,26 @@ export function createTour(pacer = createPacer()) {
         ) {
           return at;
         }
-        from = pacer.toEffort(at);
-        to = pacer.toEffort(stops[next].y);
-        phase = "move";
-        clock = 0;
-        length = Math.max(0.3, (to - from) * perEffort) * stops[next].slow;
+        /* Started part way through a scene, it plays the rest of it. */
+        const here = next > 0 ? stops[next - 1] : null;
+        if (here && here.through > at + 2 && at >= here.y - 2) {
+          phase = "play";
+          from = at;
+          to = here.through;
+          clock = 0;
+          length = (here.play * (to - from)) / (to - here.y);
+        } else {
+          move();
+        }
+      }
+      if (phase === "play") {
+        const u = Math.min(1, clock / length);
+        at = from + (to - from) * smoothstep(u);
+        if (u < 1) {
+          return at;
+        }
+        at = to;
+        move();
       }
       const u = Math.min(1, clock / length);
       at = pacer.fromEffort(from + (to - from) * flick(u));
