@@ -133,7 +133,8 @@ takes about 91 s. Any scroll, key, click or tap stops it.
 
 Services and How we work are set larger than the other captions, and on a wide screen
 their copy stands in the middle of the frame beside the 3D subject rather than in the
-bottom corner (`--pin` and `--caption-max` on `#services, #process` in `main.css`).
+bottom corner (`--pin` and `--caption-max` on `#services, #process` in `main.css`). Why us
+is set as large, on the same wider column, but stays pinned low.
 
 ## How localization works
 

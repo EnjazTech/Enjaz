@@ -1616,6 +1616,32 @@ a.lang__opt:focus-visible {
       --caption-max: min(36rem, 46vw);
     }
   }
+  /* Why us is set as large, on a wider column so the longer copy does not grow too
+     tall, and stays pinned low. */
+  html.w3d #why .eyebrow {
+    font-size: 0.9375rem;
+  }
+  html.w3d #why h2 {
+    font-size: clamp(1.875rem, 1.2rem + 2.2vw, 3.25rem);
+  }
+  html.w3d :is(.why__lead, .checklist li) {
+    font-size: clamp(1.0625rem, 0.95rem + 0.45vw, 1.3125rem);
+    line-height: 1.75;
+  }
+  html.w3d .checklist {
+    gap: 1rem;
+  }
+  html.w3d .stat__value {
+    font-size: clamp(2.25rem, 1.6rem + 2.4vw, 3.5rem);
+  }
+  html.w3d .stat__label {
+    font-size: 1rem;
+  }
+  @media (orientation: landscape) and (min-height: 34rem) {
+    html.w3d #why {
+      --caption-max: min(36rem, 46vw);
+    }
+  }
   html.w3d #why {
     --span: 48svh;
   }
